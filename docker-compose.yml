@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: nexivo_postgres
+    environment:
+      POSTGRES_DB: nexivo
+      POSTGRES_USER: nexivo_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: nexivo_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  superset:
+    image: apache/superset:3.1.0
+    container_name: nexivo_superset
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+    volumes:
+      - ./superset_config.py:/app/pythonpath/superset_config.py
+      - superset_data:/app/superset_home
+    ports:
+      - "8088:8088"
+    depends_on:
+      - postgres
+    command: >
+      sh -c "superset db upgrade &&
+             superset init &&
+             gunicorn --bind 0.0.0.0:8088 --workers 4 --timeout 120 superset.app:create_app()"
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: nexivo_backend
+    environment:
+      - DEBUG=1
+      - DATABASE_URL=postgresql://nexivo_user:${POSTGRES_PASSWORD}@postgres:5432/nexivo
+      - REDIS_URL=redis://redis:6379/0
+      - SUPERSET_API_URL=http://superset:8088/api/v1
+      - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY}
+      - SECRET_KEY=${DJANGO_SECRET_KEY}
+    volumes:
+      - ./backend:/app
+      - static_volume:/app/static
+      - media_volume:/app/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+      - superset
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn nexivo.wsgi:application --bind 0.0.0.0:8000 --workers 4"
+
+  celery:
+    build: ./backend
+    container_name: nexivo_celery
+    environment:
+      - DATABASE_URL=postgresql://nexivo_user:${POSTGRES_PASSWORD}@postgres:5432/nexivo
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - postgres
+      - redis
+    command: celery -A nexivo worker --loglevel=info
+
+  frontend:
+    build: ./frontend
+    container_name: nexivo_frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000/api
+    depends_on:
+      - backend
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  postgres_data:
+  superset_data:
+  static_volume:
+  media_volume:
