@@ -15,6 +15,12 @@ install: ## Install all dependencies
 	cd backend && $(PIP) install -r requirements.txt
 	cd frontend && $(NPM) install
 
+setup: install ## First-time setup: install deps, copy .env, migrate, seed
+	@if [ ! -f backend/.env ]; then cp .env.example backend/.env && echo "Created backend/.env from .env.example"; else echo "backend/.env already exists, skipping"; fi
+	$(MAKE) migrate
+	$(MAKE) seed
+	@echo "\nSetup complete! Run 'make backend' and 'make frontend' in separate terminals."
+
 migrate: ## Run database migrations
 	cd backend && $(MANAGE) migrate
 
