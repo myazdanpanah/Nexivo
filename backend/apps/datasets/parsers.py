@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 
 import pandas as pd
@@ -20,7 +21,6 @@ def parse_excel_file(file_path: str) -> tuple[pd.DataFrame, list, dict]:
 
     # Clean column names: strip whitespace, lowercase, replace spaces/hyphens with underscores,
     # remove ASCII special characters but keep Unicode letters (Farsi, Arabic, etc.)
-    import re
     df.columns = [
         re.sub(r'[^\w]', '', col.strip().lower().replace(" ", "_").replace("-", "_"))
         or f"col_{i}"  # fallback for empty names
@@ -110,7 +110,6 @@ def _insert_dataframe(df: pd.DataFrame, table_name: str) -> None:
 
 def drop_table(table_name: str) -> None:
     """Drop a table if it exists."""
-    import re
     # Validate table name is alphanumeric + underscores only
     if not re.match(r'^[a-zA-Z0-9_]+$', table_name):
         raise ValueError(f"Invalid table name: {table_name}")

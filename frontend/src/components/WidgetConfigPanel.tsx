@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useDashboardStore } from '../store/dashboardStore'
 import api from '../api/client'
@@ -41,18 +41,18 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
     fetchDatasets()
   }, [])
 
-  // When dataset changes, auto-select all columns (only if columns not already set)
-  const [prevDatasetId, setPrevDatasetId] = useState<number | null>(selectedDatasetId)
+  // When dataset changes, auto-select all columns
+  const prevDatasetIdRef = useRef<number | null>(selectedDatasetId)
   useEffect(() => {
-    if (selectedDatasetId !== prevDatasetId) {
-      setPrevDatasetId(selectedDatasetId)
+    if (selectedDatasetId !== prevDatasetIdRef.current) {
+      prevDatasetIdRef.current = selectedDatasetId
       if (selectedDataset) {
         setSelectedColumns(selectedDataset.column_names)
       } else {
         setSelectedColumns([])
       }
     }
-  }, [selectedDatasetId, prevDatasetId, selectedDataset])
+  }, [selectedDatasetId, selectedDataset])
 
   const fetchDatasets = async () => {
     try {
