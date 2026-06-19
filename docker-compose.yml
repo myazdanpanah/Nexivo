@@ -45,11 +45,15 @@ services:
     container_name: nexivo_backend
     environment:
       - DEBUG=1
-      - DATABASE_URL=postgresql://nexivo_user:${POSTGRES_PASSWORD}@postgres:5432/nexivo
+      - SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-change-me}
+      - POSTGRES_DB=nexivo
+      - POSTGRES_USER=nexivo_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_HOST=postgres
+      - DB_PORT=5432
       - REDIS_URL=redis://redis:6379/0
       - SUPERSET_API_URL=http://superset:8088/api/v1
       - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY}
-      - SECRET_KEY=${DJANGO_SECRET_KEY}
     volumes:
       - ./backend:/app
       - static_volume:/app/static
