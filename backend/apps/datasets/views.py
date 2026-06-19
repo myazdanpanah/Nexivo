@@ -197,5 +197,5 @@ def dataset_query(request, pk):
         "columns": col_names,
         "data": data,
         "row_count": len(data),
-        "filters_applied": [f.filter_name for f in filters],
+        "filters_applied": [f"{f.column_name} {f.operator}={f.value}" for f in filters],
     })
