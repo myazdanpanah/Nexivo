@@ -255,6 +255,173 @@ class CreateTableFromDataframeTests(TestCase):
         self.assertEqual(len(rows), 3)
 
 
+class ParseEdgeCaseTests(TestCase):
+    """Tests for real-world parser edge cases: mixed types, large files, Unicode/Farsi."""
+
+    def setUp(self):
+        self.table_name = f"test_edge_{generate_table_name('edge').rsplit('_', 1)[1]}"
+
+    def tearDown(self):
+        with connection.cursor() as cursor:
+            cursor.execute(f'DROP TABLE IF EXISTS "{self.table_name}"')
+
+    def test_mixed_type_csv_columns(self):
+        """CSV with columns of mixed types (int, float, string, bool) parses correctly."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write("id,name,amount,active\n")
+            f.write("1,Alice,100.5,true\n")
+            f.write("2,Bob,200,false\n")
+            f.write("3,Charlie,0,TRUE\n")
+            tmp_path = f.name
+
+        try:
+            df, col_names, col_types = parse_excel_file(tmp_path)
+            self.assertEqual(len(df), 3)
+            self.assertEqual(col_names, ["id", "name", "amount", "active"])
+            # Verify types are correctly inferred
+            self.assertEqual(col_types["id"], "BIGINT")
+            self.assertEqual(col_types["amount"], "DOUBLE PRECISION")
+            self.assertEqual(col_types["name"], "TEXT")
+        finally:
+            os.unlink(tmp_path)
+
+    def test_mixed_types_inserted_correctly(self):
+        """DataFrame with mixed column types is inserted and retrievable from PostgreSQL."""
+        df = pd.DataFrame({
+            "id": [1, 2, 3],
+            "name": ["Alice", "Bob", "Charlie"],
+            "score": [95.5, 87.0, 72.3],
+            "passed": [True, True, False],
+        })
+        create_table_from_dataframe(df, self.table_name)
+
+        with connection.cursor() as cursor:
+            cursor.execute(f'SELECT id, name, score, passed FROM "{self.table_name}" ORDER BY id')
+            rows = cursor.fetchall()
+
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0], (1, "Alice", 95.5, True))
+        self.assertEqual(rows[1], (2, "Bob", 87.0, True))
+        self.assertEqual(rows[2], (3, "Charlie", 72.3, False))
+
+    def test_large_csv_file(self):
+        """Parser handles a CSV file with 1000 rows without error."""
+        import csv
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["id", "name", "value"])
+            for i in range(1000):
+                writer.writerow([i, f"user_{i}", i * 1.5])
+            tmp_path = f.name
+
+        try:
+            df, col_names, col_types = parse_excel_file(tmp_path)
+            self.assertEqual(len(df), 1000)
+            self.assertEqual(col_names, ["id", "name", "value"])
+            # Verify data integrity for first and last rows
+            self.assertEqual(df.iloc[0]["name"], "user_0")
+            self.assertEqual(df.iloc[999]["name"], "user_999")
+            self.assertAlmostEqual(df.iloc[500]["value"], 750.0)
+        finally:
+            os.unlink(tmp_path)
+
+    def test_large_file_inserted_correctly(self):
+        """1000-row DataFrame is fully inserted into PostgreSQL."""
+        df = pd.DataFrame({
+            "id": range(1000),
+            "name": [f"user_{i}" for i in range(1000)],
+            "value": [i * 1.5 for i in range(1000)],
+        })
+        create_table_from_dataframe(df, self.table_name)
+
+        with connection.cursor() as cursor:
+            cursor.execute(f'SELECT COUNT(*) FROM "{self.table_name}"')
+            count = cursor.fetchone()[0]
+        self.assertEqual(count, 1000)
+
+    def test_unicode_farsi_csv(self):
+        """CSV with Farsi/Arabic Unicode characters parses correctly."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write("نام,مبلغ,شهر\n")
+            f.write("علی,1000000,تهران\n")
+            f.write("محمد,2500000,اصفهان\n")
+            f.write("فاطمه,750000,شیراز\n")
+            tmp_path = f.name
+
+        try:
+            df, col_names, col_types = parse_excel_file(tmp_path)
+            self.assertEqual(len(df), 3)
+            # Column names should be cleaned but keep Farsi characters
+            self.assertIn("نام", col_names)
+            self.assertIn("مبلغ", col_names)
+            self.assertIn("شهر", col_names)
+            # Verify Farsi data is preserved
+            self.assertEqual(df.iloc[0]["نام"], "علی")
+            self.assertEqual(df.iloc[0]["شهر"], "تهران")
+            self.assertEqual(df.iloc[2]["نام"], "فاطمه")
+        finally:
+            os.unlink(tmp_path)
+
+    def test_unicode_farsi_xlsx(self):
+        """Excel file with Farsi/Arabic content parses correctly."""
+        df = pd.DataFrame({
+            "نام": ["علی", "محمد", "فاطمه"],
+            "مبلغ": [1000000, 2500000, 750000],
+            "شهر": ["تهران", "اصفهان", "شیراز"],
+        })
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+            tmp_path = f.name
+        df.to_excel(tmp_path, index=False)
+
+        try:
+            parsed_df, col_names, col_types = parse_excel_file(tmp_path)
+            self.assertEqual(len(parsed_df), 3)
+            self.assertIn("نام", col_names)
+            self.assertIn("مبلغ", col_names)
+            self.assertEqual(parsed_df.iloc[0]["نام"], "علی")
+            self.assertEqual(parsed_df.iloc[1]["شهر"], "اصفهان")
+        finally:
+            os.unlink(tmp_path)
+
+    def test_farsi_data_inserted_into_postgresql(self):
+        """Farsi/Arabic data is correctly stored and retrieved from PostgreSQL."""
+        df = pd.DataFrame({
+            "نام": ["علی", "محمد", "فاطمه"],
+            "مبلغ": [1000000, 2500000, 750000],
+            "شهر": ["تهران", "اصفهان", "شیراز"],
+        })
+        create_table_from_dataframe(df, self.table_name)
+
+        with connection.cursor() as cursor:
+            cursor.execute(f'SELECT "نام", "مبلغ", "شهر" FROM "{self.table_name}" ORDER BY "مبلغ"')
+            rows = cursor.fetchall()
+
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0], ("فاطمه", 750000, "شیراز"))
+        self.assertEqual(rows[1], ("علی", 1000000, "تهران"))
+        self.assertEqual(rows[2], ("محمد", 2500000, "اصفهان"))
+
+    def test_empty_cells_in_csv(self):
+        """CSV with empty cells handles them as NaN/None."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write("name,amount\n")
+            f.write("Alice,100\n")
+            f.write(",200\n")
+            f.write("Charlie,\n")
+            tmp_path = f.name
+
+        try:
+            df, col_names, col_types = parse_excel_file(tmp_path)
+            self.assertEqual(len(df), 3)
+            # Bob row has empty name
+            self.assertTrue(pd.isna(df.iloc[1]["name"]))
+            # Charlie row has empty amount
+            self.assertTrue(pd.isna(df.iloc[2]["amount"]))
+        finally:
+            os.unlink(tmp_path)
+
+
 class DropTableTests(TestCase):
     """Tests for drop_table function."""
 
