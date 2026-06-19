@@ -202,6 +202,46 @@ class CreateTableFromDataframeTests(TestCase):
         create_table_from_dataframe(df, self.table_name)
         create_table_from_dataframe(df, self.table_name)  # Should not raise
 
+    def test_duplicate_create_appends_data(self):
+        """Calling create_table_from_dataframe twice appends data (does not replace)."""
+        df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+        create_table_from_dataframe(df, self.table_name)
+        create_table_from_dataframe(df, self.table_name)
+
+        with connection.cursor() as cursor:
+            cursor.execute(f'SELECT COUNT(*) FROM "{self.table_name}"')
+            count = cursor.fetchone()[0]
+        # CREATE TABLE IF NOT EXISTS skips table recreation,
+        # but _insert_dataframe always inserts, so rows are appended.
+        self.assertEqual(count, 4)
+
+    def test_nan_none_inserted_as_null(self):
+        """NaN and None values in DataFrame are inserted as NULLs in PostgreSQL."""
+        df = pd.DataFrame({
+            "name": ["Alice", "Bob", "Charlie"],
+            "score": [100.0, float("nan"), None],
+            "note": ["ok", None, float("nan")],
+        })
+        create_table_from_dataframe(df, self.table_name)
+
+        with connection.cursor() as cursor:
+            cursor.execute(f'SELECT name, score, note FROM "{self.table_name}" ORDER BY name')
+            rows = cursor.fetchall()
+
+        self.assertEqual(len(rows), 3)
+        # Bob's score should be NULL (was NaN)
+        bob = [r for r in rows if r[0] == "Bob"][0]
+        self.assertIsNone(bob[1])
+        # Charlie's score should be NULL (was None)
+        charlie = [r for r in rows if r[0] == "Charlie"][0]
+        self.assertIsNone(charlie[1])
+        # Charlie's note should be NULL (was NaN)
+        self.assertIsNone(charlie[2])
+        # Alice's values should be non-NULL
+        alice = [r for r in rows if r[0] == "Alice"][0]
+        self.assertIsNotNone(alice[1])
+        self.assertIsNotNone(alice[2])
+
     def test_special_characters_in_data(self):
         """Data with special characters is inserted correctly."""
         df = pd.DataFrame({
