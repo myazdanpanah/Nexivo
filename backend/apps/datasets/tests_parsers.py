@@ -415,9 +415,67 @@ class ParseEdgeCaseTests(TestCase):
             df, col_names, col_types = parse_excel_file(tmp_path)
             self.assertEqual(len(df), 3)
             # Bob row has empty name
-            self.assertTrue(pd.isna(df.iloc[1]["name"]))
+            self.assertTrue(pd.isna(df.at[1, "name"]))
             # Charlie row has empty amount
-            self.assertTrue(pd.isna(df.iloc[2]["amount"]))
+            self.assertTrue(pd.isna(df.at[2, "amount"]))
+        finally:
+            os.unlink(tmp_path)
+
+    def test_mixed_types_with_empty_cells_csv(self):
+        """CSV with mixed types AND empty cells tests type inference and NaN together."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write("id,name,score,active\n")
+            f.write("1,Alice,95.5,true\n")
+            f.write(",Bob,80,false\n")
+            f.write("3,,72.3,TRUE\n")
+            f.write("4,Dave,,\n")
+            tmp_path = f.name
+
+        try:
+            df, col_names, col_types = parse_excel_file(tmp_path)
+            self.assertEqual(len(df), 4)
+            # Row 1 (Bob): empty id -> NaN
+            self.assertTrue(pd.isna(df.at[1, "id"]))
+            # Row 2 (Charlie): empty name -> NaN
+            self.assertTrue(pd.isna(df.at[2, "name"]))
+            # Row 3 (Dave): empty score and active -> NaN
+            self.assertTrue(pd.isna(df.at[3, "score"]))
+            self.assertTrue(pd.isna(df.at[3, "active"]))
+            # Verify non-empty values are correct
+            self.assertEqual(df.at[0, "name"], "Alice")
+            self.assertAlmostEqual(df.at[0, "score"], 95.5)
+            # Insert into PostgreSQL and verify NULLs
+            create_table_from_dataframe(df, self.table_name)
+            with connection.cursor() as cursor:
+                cursor.execute(f'SELECT * FROM "{self.table_name}" ORDER BY id')
+                rows = cursor.fetchall()
+                col_names_db = [desc[0] for desc in cursor.description]
+            self.assertEqual(len(rows), 4)
+            # Find Bob's row (id is NULL)
+            bob_row = [r for r in rows if r[col_names_db.index("name")] == "Bob"][0]
+            self.assertIsNone(bob_row[col_names_db.index("id")])
+        finally:
+            os.unlink(tmp_path)
+
+    def test_bilingual_farsi_latin_column_names(self):
+        """CSV with mixed Farsi and Latin column names with spaces is cleaned correctly."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write("فروش Q1-2024 , نام محصول , Price (USD)\n")
+            f.write("1000,لپ تاپ,500\n")
+            f.write("2000,گوشی,300\n")
+            tmp_path = f.name
+
+        try:
+            df, col_names, col_types = parse_excel_file(tmp_path)
+            self.assertEqual(len(df), 2)
+            # Column names should be cleaned: lowercase, spaces->underscores, hyphens->underscores
+            self.assertIn("فروش_q1_2024", col_names)
+            self.assertIn("نام_محصول", col_names)
+            self.assertIn("price_(usd)", col_names)
+            # Verify data is preserved
+            self.assertEqual(df.iloc[0][col_names[0]], 1000)
+            self.assertEqual(df.iloc[0][col_names[1]], "لپ تاپ")
+            self.assertEqual(df.iloc[1][col_names[2]], 300)
         finally:
             os.unlink(tmp_path)
 
