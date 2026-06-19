@@ -202,8 +202,8 @@ class CreateTableFromDataframeTests(TestCase):
         create_table_from_dataframe(df, self.table_name)
         create_table_from_dataframe(df, self.table_name)  # Should not raise
 
-    def test_duplicate_create_appends_data(self):
-        """Calling create_table_from_dataframe twice appends data (does not replace)."""
+    def test_duplicate_create_is_idempotent(self):
+        """Calling create_table_from_dataframe twice produces same data (TRUNCATE makes it idempotent)."""
         df = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
         create_table_from_dataframe(df, self.table_name)
         create_table_from_dataframe(df, self.table_name)
@@ -211,9 +211,8 @@ class CreateTableFromDataframeTests(TestCase):
         with connection.cursor() as cursor:
             cursor.execute(f'SELECT COUNT(*) FROM "{self.table_name}"')
             count = cursor.fetchone()[0]
-        # CREATE TABLE IF NOT EXISTS skips table recreation,
-        # but _insert_dataframe always inserts, so rows are appended.
-        self.assertEqual(count, 4)
+        # TRUNCATE before insert makes it idempotent — only 2 rows.
+        self.assertEqual(count, 2)
 
     def test_nan_none_inserted_as_null(self):
         """NaN and None values in DataFrame are inserted as NULLs in PostgreSQL."""
@@ -471,7 +470,7 @@ class ParseEdgeCaseTests(TestCase):
             # Column names should be cleaned: lowercase, spaces->underscores, hyphens->underscores
             self.assertIn("فروش_q1_2024", col_names)
             self.assertIn("نام_محصول", col_names)
-            self.assertIn("price_(usd)", col_names)
+            self.assertIn("price_usd", col_names)
             # Verify data is preserved
             self.assertEqual(df.iloc[0][col_names[0]], 1000)
             self.assertEqual(df.iloc[0][col_names[1]], "لپ تاپ")

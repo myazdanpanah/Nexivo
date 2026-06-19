@@ -25,6 +25,7 @@ interface DashboardState {
   widgets: WidgetConfig[]
   setDashboard: (id: number, name: string) => void
   setLayout: (layout: GridItem[]) => void
+  setWidgets: (widgets: WidgetConfig[]) => void
   addWidget: (widget: WidgetConfig) => void
   updateWidget: (id: string, updates: Partial<WidgetConfig>) => void
   removeWidget: (id: string) => void
@@ -40,6 +41,7 @@ export const useDashboardStore = create<DashboardState>()(
       widgets: [],
       setDashboard: (id, name) => set({ dashboardId: id, dashboardName: name }),
       setLayout: (layout) => set({ layout }),
+      setWidgets: (widgets) => set({ widgets }),
       addWidget: (widget) =>
         set((state) => ({
           widgets: [...state.widgets, widget],

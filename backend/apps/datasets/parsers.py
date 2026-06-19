@@ -18,10 +18,13 @@ def parse_excel_file(file_path: str) -> tuple[pd.DataFrame, list, dict]:
     else:
         raise ValueError(f"Unsupported file format: {ext}")
 
-    # Clean column names: strip whitespace, lowercase, replace spaces with underscores
+    # Clean column names: strip whitespace, lowercase, replace spaces/hyphens with underscores,
+    # remove ASCII special characters but keep Unicode letters (Farsi, Arabic, etc.)
+    import re
     df.columns = [
-        col.strip().lower().replace(" ", "_").replace("-", "_")
-        for col in df.columns
+        re.sub(r'[^\w]', '', col.strip().lower().replace(" ", "_").replace("-", "_"))
+        or f"col_{i}"  # fallback for empty names
+        for i, col in enumerate(df.columns)
     ]
 
     # Convert pandas dtypes to PostgreSQL-compatible types
@@ -76,6 +79,8 @@ def create_table_from_dataframe(df: pd.DataFrame, table_name: str) -> None:
 
     with connection.cursor() as cursor:
         cursor.execute(create_sql)
+        # TRUNCATE before insert to make idempotent
+        cursor.execute(f'TRUNCATE TABLE "{table_name}"')
 
     # Insert data in chunks
     if not df.empty:

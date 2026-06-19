@@ -14,7 +14,7 @@ const ResponsiveGridLayout = WidthProvider(Responsive)
 
 export default function DashboardBuilderPage() {
   const { id } = useParams<{ id: string }>()
-  const { layout, widgets, setLayout, addWidget, removeWidget, setDashboard } = useDashboardStore()
+  const { layout, widgets, setLayout, setWidgets, addWidget, removeWidget, setDashboard } = useDashboardStore()
   const [showConfig, setShowConfig] = useState(false)
   const [editingWidget, setEditingWidget] = useState<string | null>(null)
 
@@ -28,6 +28,15 @@ export default function DashboardBuilderPage() {
       const res = await api.get(`/dashboards/${dashboardId}/`)
       setDashboard(res.data.id, res.data.name)
 
+      const serverWidgets = res.data.widgets.map((w: Record<string, unknown>) => ({
+        id: String(w.id),
+        title: w.title as string,
+        chartType: w.chart_type as string,
+        datasetId: w.dataset as number | null,
+        chartConfig: (w.chart_config as Record<string, unknown>) || {},
+        queryConfig: (w.query_config as Record<string, unknown>) || {},
+      }))
+
       const serverLayout = res.data.widgets.map((w: Record<string, unknown>) => ({
         i: String(w.id),
         x: w.grid_x as number,
@@ -36,6 +45,7 @@ export default function DashboardBuilderPage() {
         h: w.grid_h as number,
       }))
 
+      setWidgets(serverWidgets)
       setLayout(serverLayout)
     } catch {
       // ignore
