@@ -10,9 +10,9 @@ interface WidgetConfigPanelProps {
 }
 
 const chartTypes = [
-  { value: 'bar', label: 'میله‌ای', icon: BarChart3 },
+  { value: 'bar', label: 'میله\u200cای', icon: BarChart3 },
   { value: 'line', label: 'خطی', icon: TrendingUp },
-  { value: 'pie', label: 'دایره‌ای', icon: PieChart },
+  { value: 'pie', label: 'دایره\u200cای', icon: PieChart },
   { value: 'table', label: 'جدول', icon: Table },
 ]
 
@@ -31,10 +31,28 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
   const [chartType, setChartType] = useState(widget?.chartType || 'bar')
   const [datasets, setDatasets] = useState<Dataset[]>([])
   const [selectedDatasetId, setSelectedDatasetId] = useState<number | null>(widget?.datasetId || null)
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(
+    (widget?.queryConfig?.columns as string[]) || []
+  )
+
+  const selectedDataset = datasets.find((d) => d.id === selectedDatasetId)
 
   useEffect(() => {
     fetchDatasets()
   }, [])
+
+  // When dataset changes, auto-select all columns (only if columns not already set)
+  const [prevDatasetId, setPrevDatasetId] = useState<number | null>(selectedDatasetId)
+  useEffect(() => {
+    if (selectedDatasetId !== prevDatasetId) {
+      setPrevDatasetId(selectedDatasetId)
+      if (selectedDataset) {
+        setSelectedColumns(selectedDataset.column_names)
+      } else {
+        setSelectedColumns([])
+      }
+    }
+  }, [selectedDatasetId, prevDatasetId, selectedDataset])
 
   const fetchDatasets = async () => {
     try {
@@ -54,13 +72,20 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
         chart_type: chartType,
         dataset: selectedDatasetId,
         chart_config: widget.chartConfig,
-        query_config: widget.queryConfig,
+        query_config: {
+          ...widget.queryConfig,
+          columns: selectedColumns.length > 0 ? selectedColumns : undefined,
+        },
       })
 
       updateWidget(widgetId, {
         title,
         chartType,
         datasetId: selectedDatasetId,
+        queryConfig: {
+          ...widget.queryConfig,
+          columns: selectedColumns.length > 0 ? selectedColumns : undefined,
+        },
       })
 
       onClose()
@@ -138,6 +163,65 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
               ))}
             </select>
           </div>
+
+          {/* Column Picker */}
+          {selectedDataset && selectedDataset.column_names.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                ستون\u200cها
+                <span className="text-xs text-gray-400 mr-2">
+                  ({chartType === 'table' ? 'ستون\u200cهای نمایشی' : 'ستون اول = دسته\u200cبندی، بقیه = مقادیر'})
+                </span>
+              </label>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto border border-gray-200 rounded-xl p-3">
+                {selectedDataset.column_names.map((col) => (
+                  <label
+                    key={col}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer transition"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedColumns.includes(col)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedColumns([...selectedColumns, col])
+                        } else {
+                          setSelectedColumns(selectedColumns.filter((c) => c !== col))
+                        }
+                      }}
+                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm text-gray-700">{col}</span>
+                    {chartType !== 'table' && selectedColumns.indexOf(col) === 0 && selectedColumns.includes(col) && (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded-full">
+                        دسته
+                      </span>
+                    )}
+                    {chartType !== 'table' && selectedColumns.indexOf(col) > 0 && selectedColumns.includes(col) && (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded-full">
+                        مقدار
+                      </span>
+                    )}
+                  </label>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => setSelectedColumns(selectedDataset.column_names)}
+                  className="text-xs text-indigo-600 hover:text-indigo-700"
+                >
+                  انتخاب همه
+                </button>
+                <span className="text-gray-300">|</span>
+                <button
+                  onClick={() => setSelectedColumns([])}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  حذف انتخاب
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Save */}
           <button

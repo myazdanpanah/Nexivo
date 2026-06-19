@@ -39,30 +39,11 @@ function buildChartOption(
         left: 'center',
         top: 'middle',
         style: {
-          text: 'داده‌ای موجود نیست',
+          text: 'داده\u200cای موجود نیست',
           fontSize: 14,
           fill: '#9ca3af',
         },
       },
-    }
-  }
-
-  // For table chart type, show a simple HTML table
-  if (chartType === 'table') {
-    return {
-      ...defaults,
-      graphic: {
-        type: 'text',
-        left: 'center',
-        top: 'middle',
-        style: {
-          text: '',
-          fontSize: 14,
-        },
-      },
-      _isTable: true,
-      _columns: columns,
-      _data: data,
     }
   }
 
@@ -161,8 +142,12 @@ function buildChartOption(
 export default function ChartWidget({ widget }: ChartWidgetProps) {
   const [option, setOption] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(false)
+  const [tableData, setTableData] = useState<{ columns: string[]; rows: Record<string, unknown>[] } | null>(null)
 
   const fetchData = useCallback(async () => {
+    // Clear table data when fetching new data
+    setTableData(null)
+
     if (!widget.datasetId) {
       setOption({
         graphic: {
@@ -190,20 +175,24 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
       })
 
       const result: QueryResult = res.data
-      const chartOption = buildChartOption(
-        widget.chartType,
-        result,
-        widget.chartConfig || {}
-      )
 
-      // Apply RTL
-      const isRTL = document.documentElement.dir === 'rtl'
-      const finalOption = applyRTL(
-        chartOption as import('echarts').EChartsOption,
-        isRTL
-      )
-
-      setOption(finalOption as Record<string, unknown>)
+      // Table chart: store data in separate state
+      if (widget.chartType === 'table') {
+        setTableData({ columns: result.columns, rows: result.data })
+        setOption(null)
+      } else {
+        const chartOption = buildChartOption(
+          widget.chartType,
+          result,
+          widget.chartConfig || {}
+        )
+        const isRTL = document.documentElement.dir === 'rtl'
+        const finalOption = applyRTL(
+          chartOption as import('echarts').EChartsOption,
+          isRTL
+        )
+        setOption(finalOption as Record<string, unknown>)
+      }
     } catch (err: unknown) {
       console.error('Chart fetch error:', err)
       const message = err instanceof Error ? err.message : 'خطا در بارگذاری داده'
@@ -229,7 +218,7 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
     fetchData()
   }, [fetchData])
 
-  if (loading && !option) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400 text-sm">
         <div className="flex items-center gap-2">
@@ -240,24 +229,14 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
     )
   }
 
-  if (!option) {
-    return (
-      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-        در حال بارگذاری...
-      </div>
-    )
-  }
-
-  // Special rendering for table chart type
-  if (widget.chartType === 'table' && option._isTable) {
-    const cols = option._columns as string[]
-    const rows = option._data as Record<string, unknown>[]
+  // Render table using separate state (not smuggled through ECharts option)
+  if (widget.chartType === 'table' && tableData) {
     return (
       <div className="h-full overflow-auto">
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="bg-gray-50">
-              {cols.map((col) => (
+              {tableData.columns.map((col) => (
                 <th key={col} className="px-3 py-2 text-right font-medium text-gray-600 border-b">
                   {col}
                 </th>
@@ -265,9 +244,9 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, idx) => (
+            {tableData.rows.map((row, idx) => (
               <tr key={idx} className="hover:bg-gray-50 transition">
-                {cols.map((col) => (
+                {tableData.columns.map((col) => (
                   <td key={col} className="px-3 py-1.5 text-right text-gray-800 border-b border-gray-100">
                     {row[col] != null ? String(row[col]) : '-'}
                   </td>
@@ -276,6 +255,14 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
             ))}
           </tbody>
         </table>
+      </div>
+    )
+  }
+
+  if (!option) {
+    return (
+      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+        در حال بارگذاری...
       </div>
     )
   }
