@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import * as echarts from 'echarts'
 import { applyRTL } from '../utils/rtlConfig'
 import { getChartDefaults } from '../utils/chartDefaults'
+import { formatKpiValue, type KpiFormat } from '../utils/kpiFormat'
 import api from '../api/client'
 
 interface Widget {
@@ -267,32 +268,12 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
         const rawVal = result.data.length > 0 ? result.data[0][valueCol] : 0
         const num = Number(rawVal) || 0
 
-        const fmt = (widget.chartConfig as Record<string, unknown>)?.kpiFormat as {
-          type?: string; currency?: string; decimals?: number; prefix?: string; suffix?: string
-        } | undefined
-
-        let formatted: string
-        if (fmt?.type === 'currency') {
-          formatted = `${fmt.currency || '$'}${num.toLocaleString(undefined, { minimumFractionDigits: fmt.decimals ?? 2, maximumFractionDigits: fmt.decimals ?? 2 })}`
-        } else if (fmt?.type === 'percentage') {
-          formatted = `${(num * 100).toLocaleString(undefined, { minimumFractionDigits: fmt.decimals ?? 1, maximumFractionDigits: fmt.decimals ?? 1 })}%`
-        } else if (fmt?.type === 'number') {
-          formatted = num.toLocaleString(undefined, { minimumFractionDigits: fmt.decimals ?? 0, maximumFractionDigits: fmt.decimals ?? 0 })
-        } else {
-          // Auto: compact notation
-          formatted = num >= 1_000_000
-            ? `${(num / 1_000_000).toFixed(1)}M`
-            : num >= 1_000
-              ? `${(num / 1_000).toFixed(1)}K`
-              : num.toLocaleString()
-        }
-
-        const prefix = fmt?.prefix || ''
-        const suffix = fmt?.suffix ? ` ${fmt.suffix}` : ''
+        const fmt = (widget.chartConfig as Record<string, unknown>)?.kpiFormat as KpiFormat | undefined
+        const formatted = formatKpiValue(num, fmt)
 
         setKpiData({
           label: valueCol,
-          value: `${prefix}${formatted}${suffix}`,
+          value: formatted,
           sub: `${result.row_count} ردیف`,
         })
       } else {

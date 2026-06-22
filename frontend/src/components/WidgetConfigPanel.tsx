@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useDashboardStore } from '../store/dashboardStore'
 import api from '../api/client'
 import { X, BarChart3, PieChart, TrendingUp, Table, Hash } from 'lucide-react'
+import { formatKpiValue, DEFAULT_KPI_FORMAT, type KpiFormat } from '../utils/kpiFormat'
 
 interface WidgetConfigPanelProps {
   widgetId: string
@@ -32,21 +33,7 @@ interface Dataset {
   column_types: Record<string, string>
 }
 
-interface KpiFormat {
-  type: 'auto' | 'number' | 'currency' | 'percentage'
-  currency: string
-  decimals: number
-  prefix: string
-  suffix: string
-}
 
-const DEFAULT_KPI_FORMAT: KpiFormat = {
-  type: 'auto',
-  currency: '$',
-  decimals: 0,
-  prefix: '',
-  suffix: '',
-}
 
 export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPanelProps) {
   const { id: dashboardId } = useParams<{ id: string }>()
@@ -436,22 +423,7 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <span className="text-[10px] text-gray-400 block mb-1">پیش‌نمایش</span>
                 <span className="text-lg font-bold text-indigo-600">
-                  {(() => {
-                    const dec = kpiFormat.decimals ?? 0
-                    const previewNum = 12345.6789
-                    let formatted: string
-                    if (kpiFormat.type === 'currency') {
-                      formatted = `${kpiFormat.currency || '$'}${previewNum.toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec })}`
-                    } else if (kpiFormat.type === 'percentage') {
-                      formatted = `${(previewNum * 100).toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec })}%`
-                    } else if (kpiFormat.type === 'number') {
-                      formatted = previewNum.toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec })
-                    } else {
-                      // auto
-                      formatted = previewNum.toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec })
-                    }
-                    return `${kpiFormat.prefix || ''}${formatted}${kpiFormat.suffix ? ` ${kpiFormat.suffix}` : ''}`
-                  })()}
+                  {formatKpiValue(12345.6789, kpiFormat)}
                 </span>
               </div>
             </div>
