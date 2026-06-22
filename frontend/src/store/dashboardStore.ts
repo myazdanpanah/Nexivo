@@ -18,11 +18,23 @@ export interface WidgetConfig {
   queryConfig: Record<string, unknown>
 }
 
+export interface DashboardFilter {
+  col: string
+  op: 'eq' | 'in' | 'contains' | 'gt' | 'lt'
+  val: string | number | (string | number)[]
+  sourceWidgetId: string
+}
+
 interface DashboardState {
   dashboardId: number | null
   dashboardName: string
   layout: GridItem[]
   widgets: WidgetConfig[]
+  // Cross-chart filtering
+  filters: DashboardFilter[]
+  setFilter: (filter: DashboardFilter) => void
+  removeFilter: (col: string) => void
+  clearFilters: () => void
   setDashboard: (id: number, name: string) => void
   setLayout: (layout: GridItem[]) => void
   setWidgets: (widgets: WidgetConfig[]) => void
@@ -55,14 +67,25 @@ export const useDashboardStore = create<DashboardState>()(
           widgets: state.widgets.map((w) =>
             w.id === id ? { ...w, ...updates } : w
           ),
-        })),
-      removeWidget: (id) =>
+        })),      removeWidget: (id) =>
         set((state) => ({
           widgets: state.widgets.filter((w) => w.id !== id),
           layout: state.layout.filter((l) => l.i !== id),
         })),
-      reset: () =>
-        set({ dashboardId: null, dashboardName: '', layout: [], widgets: [] }),
+      filters: [],
+      setFilter: (filter) =>
+        set((state) => ({
+          filters: [
+            ...state.filters.filter((f) => f.col !== filter.col || f.sourceWidgetId !== filter.sourceWidgetId),
+            filter,
+          ],
+        })),
+      removeFilter: (col) =>
+        set((state) => ({
+          filters: state.filters.filter((f) => f.col !== col),
+        })),
+      clearFilters: () => set({ filters: [] }),
+      reset: () => set({ dashboardId: null, dashboardName: '', layout: [], widgets: [], filters: [] }),
     }),
     {
       name: 'nexivo-dashboard',

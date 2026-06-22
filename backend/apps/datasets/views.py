@@ -229,26 +229,22 @@ def dataset_query(request, pk):
             metric_cols = [c for c in metric_cols if c != columns[0]]
 
         select_parts = []
+        group_by_parts = []
         for c in dim_cols:
             if c in date_truncs and date_truncs[c] in DATE_TRUNC_UNITS:
                 unit = date_truncs[c]
                 alias = f"{c}_{unit}"
-                select_parts.append(f'DATE_TRUNC('{unit}', "{c}")::DATE AS "{alias}"')
+                dt_expr = 'DATE_TRUNC(%s, "%s")' % (unit, c)
+                select_parts.append(f'{dt_expr}::DATE AS "{alias}"')
+                group_by_parts.append(dt_expr)
             else:
                 select_parts.append(f'"{c}"')
+                group_by_parts.append(f'"{c}"')
         for col in metric_cols:
             func = metrics_map[col].upper()
             alias = col
             select_parts.append(f'{func}("{col}") AS "{alias}"')
 
-        # Build GROUP BY using the same expressions as SELECT for date_truncs
-        group_by_parts = []
-        for c in dim_cols:
-            if c in date_truncs and date_truncs[c] in DATE_TRUNC_UNITS:
-                unit = date_truncs[c]
-                group_by_parts.append(f'DATE_TRUNC('{unit}', "{c}")')
-            else:
-                group_by_parts.append(f'"{c}"')
         group_by = ", ".join(group_by_parts)
         order_by = group_by  # order by dimension(s)
 

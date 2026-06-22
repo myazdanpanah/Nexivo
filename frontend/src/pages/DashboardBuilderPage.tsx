@@ -5,7 +5,7 @@ import { useDashboardStore } from '../store/dashboardStore'
 import api from '../api/client'
 import ChartWidget from '../components/ChartWidget'
 import WidgetConfigPanel from '../components/WidgetConfigPanel'
-import { Plus, ArrowRight, Settings, Trash2 } from 'lucide-react'
+import { Plus, ArrowRight, Settings, Trash2, X } from 'lucide-react'
 
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
@@ -14,9 +14,11 @@ const ResponsiveGridLayout = WidthProvider(Responsive)
 
 export default function DashboardBuilderPage() {
   const { id } = useParams<{ id: string }>()
-  const { layout, widgets, setLayout, setWidgets, addWidget, removeWidget, setDashboard } = useDashboardStore()
+  const { layout, widgets, setLayout, setWidgets, addWidget, removeWidget, setDashboard, filters, setFilter, removeFilter, clearFilters } = useDashboardStore()
   const [showConfig, setShowConfig] = useState(false)
   const [editingWidget, setEditingWidget] = useState<string | null>(null)
+  // Drill-down state
+  const [drillState, setDrillState] = useState<Record<string, Array<{ col: string; value: string }>>>({})
 
   useEffect(() => {
     if (id) loadDashboard(parseInt(id))
@@ -118,6 +120,24 @@ export default function DashboardBuilderPage() {
             <h1 className="text-lg font-bold text-gray-900">ویرایشگر داشبورد</h1>
           </div>
           <div className="flex items-center gap-2">
+            {filters.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                {filters.map((f, idx) => (
+                  <span key={idx} className="flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs">
+                    {f.col} = {String(f.val)}
+                    <button onClick={() => removeFilter(f.col)} className="hover:text-indigo-900">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <button
+                  onClick={clearFilters}
+                  className="text-xs text-gray-500 hover:text-gray-700 underline"
+                >
+                  پاک کردن
+                </button>
+              </div>
+            )}
             <button
               onClick={addNewWidget}
               className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm"
@@ -184,7 +204,24 @@ export default function DashboardBuilderPage() {
                     </div>
                   </div>
                   <div className="p-2" style={{ height: 'calc(100% - 40px)' }}>
-                    <ChartWidget widget={w} />
+                    <ChartWidget
+                      widget={w}
+                      dashboardFilters={filters}
+                      onFilter={setFilter}
+                      drillBreadcrumb={drillState[w.id] || []}
+                      onDrillDown={(col, value) => {
+                        setDrillState((prev) => ({
+                          ...prev,
+                          [w.id]: [...(prev[w.id] || []), { col, value }],
+                        }))
+                      }}
+                      onDrillUp={(index) => {
+                        setDrillState((prev) => ({
+                          ...prev,
+                          [w.id]: (prev[w.id] || []).slice(0, index + 1),
+                        }))
+                      }}
+                    />
                   </div>
                 </div>
               </div>

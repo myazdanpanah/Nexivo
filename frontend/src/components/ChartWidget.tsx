@@ -3,6 +3,7 @@ import * as echarts from 'echarts'
 import { applyRTL } from '../utils/rtlConfig'
 import { getChartDefaults } from '../utils/chartDefaults'
 import { formatKpiValue, type KpiFormat } from '../utils/kpiFormat'
+import { type DashboardFilter } from '../store/dashboardStore'
 import api from '../api/client'
 
 interface Widget {
@@ -12,6 +13,15 @@ interface Widget {
   datasetId: number | null
   chartConfig: Record<string, unknown>
   queryConfig: Record<string, unknown>
+}
+
+interface ChartWidgetProps {
+  widget: Widget
+  dashboardFilters?: DashboardFilter[]
+  onFilter?: (filter: DashboardFilter) => void
+  onDrillDown?: (col: string, value: string) => void
+  drillBreadcrumb?: Array<{ col: string; value: string }>
+  onDrillUp?: (index: number) => void
 }
 
 /**
@@ -51,10 +61,6 @@ function buildMetrics(
     metrics[cols[i]] = 'SUM'
   }
   return metrics
-}
-
-interface ChartWidgetProps {
-  widget: Widget
 }
 
 interface QueryResult {
@@ -240,7 +246,14 @@ function buildChartOption(
   }
 }
 
-export default function ChartWidget({ widget }: ChartWidgetProps) {
+export default function ChartWidget({
+  widget,
+  dashboardFilters = [],
+  onFilter,
+  onDrillDown,
+  drillBreadcrumb = [],
+  onDrillUp,
+}: ChartWidgetProps) {
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstance = useRef<echarts.ECharts | null>(null)
   const [loading, setLoading] = useState(false)
@@ -257,7 +270,6 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
     const chart = echarts.init(chartRef.current, undefined, { renderer: 'svg' })
     chartInstance.current = chart
 
-    // ResizeObserver handles both window resizes AND grid layout drag/resize
     const resizeObserver = new ResizeObserver(() => {
       if (!chart.isDisposed()) {
         chart.resize()
@@ -279,7 +291,6 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
     setKpiData(null)
     setError(null)
 
-    // For non-ECharts types (table, kpi), skip the chart-instance guard
     if (usesECharts && (!chartInstance.current || chartInstance.current.isDisposed())) {
       return
     }
@@ -308,23 +319,36 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
 
     try {
       const metrics = buildMetrics(widget.chartType, widget.queryConfig)
+
+      // Merge widget filters with dashboard cross-chart filters and drill-down filters
+      const widgetFilters = (widget.queryConfig?.filters as Array<Record<string, unknown>>) || []
+      const widgetColumns = (widget.queryConfig?.columns as string[]) || []
+      const drillFilters = (drillBreadcrumb || []).map((crumb) => ({
+        col: crumb.col, op: 'eq' as const, val: crumb.value,
+      }))
+      const mergedFilters = [
+        ...widgetFilters,
+        ...dashboardFilters
+          .filter((f) => f.sourceWidgetId !== widget.id && widgetColumns.includes(f.col))
+          .map((f) => ({ col: f.col, op: f.op, val: f.val })),
+        ...drillFilters,
+      ]
+
       const res = await api.post(`/datasets/${widget.datasetId}/query/`, {
         columns: widget.queryConfig?.columns || undefined,
         metrics: metrics || undefined,
         date_truncs: widget.queryConfig?.date_truncs || undefined,
-        filters: widget.queryConfig?.filters || [],
+        filters: mergedFilters.length > 0 ? mergedFilters : undefined,
       })
 
       const result: QueryResult = res.data
 
-      // Re-check instance is still alive after async gap (ECharts types only)
       const chart = chartInstance.current
       if (usesECharts && (!chart || chart.isDisposed())) return
 
       if (widget.chartType === 'table') {
         setTableData({ columns: result.columns, rows: result.data })
       } else if (widget.chartType === 'kpi') {
-        // KPI: show first metric value as big number with formatting
         const metricCols = Object.keys(metrics || {})
         const valueCol = metricCols[0] || result.columns[result.columns.length - 1]
         const rawVal = result.data.length > 0 ? result.data[0][valueCol] : 0
@@ -351,6 +375,33 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
           isRTL
         )
         chart.setOption(finalOption as Record<string, unknown>, true)
+
+        // Add cross-chart filter click handler
+        if (onFilter) {
+          chart.off('click')
+          chart.on('click', (params: { seriesType?: string; name?: string; value?: unknown }) => {
+            // For pie/donut: click slice → filter by category
+            if (params.seriesType === 'pie' && params.name) {
+              const dimCol = result.columns[0]
+              onFilter({
+                col: dimCol,
+                op: 'eq',
+                val: params.name,
+                sourceWidgetId: widget.id,
+              })
+            }
+            // For bar/line/area: click bar → filter by category
+            if ((params.seriesType === 'bar' || params.seriesType === 'line') && params.name) {
+              const dimCol = result.columns[0]
+              onFilter({
+                col: dimCol,
+                op: 'eq',
+                val: params.name,
+                sourceWidgetId: widget.id,
+              })
+            }
+          })
+        }
       }
     } catch (err: unknown) {
       console.error('Chart fetch error:', err)
@@ -359,10 +410,9 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
     } finally {
       setLoading(false)
     }
-  }, [usesECharts, widget.datasetId, widget.chartType, widget.chartConfig, widget.queryConfig])
+  }, [usesECharts, widget, dashboardFilters, drillBreadcrumb, onFilter])
 
   useEffect(() => {
-    // Small delay to ensure chart init effect runs first (StrictMode safe)
     const timer = setTimeout(() => fetchData(), 0)
     return () => clearTimeout(timer)
   }, [fetchData])
@@ -381,6 +431,25 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
   if (widget.chartType === 'table' && tableData) {
     return (
       <div className="h-full overflow-auto">
+        {/* Drill-down breadcrumb */}
+        {drillBreadcrumb.length > 0 && onDrillUp && (
+          <div className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-xs border-b">
+            <button onClick={() => onDrillUp(-1)} className="text-indigo-600 hover:text-indigo-800 font-medium">
+              همه
+            </button>
+            {drillBreadcrumb.map((crumb, idx) => (
+              <span key={idx} className="flex items-center gap-1">
+                <span className="text-gray-400">/</span>
+                <button
+                  onClick={() => onDrillUp(idx)}
+                  className="text-indigo-600 hover:text-indigo-800"
+                >
+                  {crumb.value}
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="bg-gray-50">
@@ -395,7 +464,13 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
             {tableData.rows.map((row, idx) => (
               <tr key={idx} className="hover:bg-gray-50 transition">
                 {tableData.columns.map((col) => (
-                  <td key={col} className="px-3 py-1.5 text-right text-gray-800 border-b border-gray-100">
+                  <td
+                    key={col}
+                    className={`px-3 py-1.5 text-right text-gray-800 border-b border-gray-100 ${
+                      onDrillDown ? 'cursor-pointer hover:bg-indigo-50' : ''
+                    }`}
+                    onClick={onDrillDown ? () => onDrillDown(col, String(row[col] ?? '')) : undefined}
+                  >
                     {row[col] != null ? String(row[col]) : '-'}
                   </td>
                 ))}
@@ -407,7 +482,6 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
     )
   }
 
-  // KPI card rendering
   if (widget.chartType === 'kpi') {
     if (error) {
       return (
@@ -438,7 +512,6 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
     )
   }
 
-  // Table error display
   if (widget.chartType === 'table' && error) {
     return (
       <div className="flex items-center justify-center h-full p-4">
@@ -447,7 +520,6 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
     )
   }
 
-  // ECharts error display (for bar/line/pie/area)
   if (error && !loading) {
     return (
       <div className="flex items-center justify-center h-full p-4">
