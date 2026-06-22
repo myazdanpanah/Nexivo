@@ -45,13 +45,15 @@ class Widget(models.Model):
 
     CHART_TYPES = [
         ("bar", "Bar Chart"),
+        ("stacked_bar", "Stacked Bar"),
         ("line", "Line Chart"),
-        ("pie", "Pie Chart"),
-        ("scatter", "Scatter Plot"),
         ("area", "Area Chart"),
+        ("pie", "Pie Chart"),
+        ("donut", "Donut Chart"),
+        ("scatter", "Scatter Plot"),
+        ("gauge", "Gauge Chart"),
         ("table", "Data Table"),
         ("kpi", "KPI Card"),
-        ("gauge", "Gauge Chart"),
         ("heatmap", "Heatmap"),
         ("treemap", "Tree Map"),
     ]

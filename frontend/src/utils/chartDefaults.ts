@@ -28,6 +28,7 @@ export function getChartDefaults(chartType: string): EChartsOption {
 
   switch (chartType) {
     case 'bar':
+    case 'stacked_bar':
       return {
         ...base,
         xAxis: {
@@ -54,6 +55,7 @@ export function getChartDefaults(chartType: string): EChartsOption {
       }
 
     case 'pie':
+    case 'donut':
       return {
         ...base,
         tooltip: {
@@ -62,7 +64,7 @@ export function getChartDefaults(chartType: string): EChartsOption {
         series: [
           {
             type: 'pie',
-            radius: ['40%', '70%'],
+            radius: chartType === 'donut' ? ['45%', '70%'] : ['0%', '70%'],
             data: [],
           },
         ],
@@ -80,6 +82,30 @@ export function getChartDefaults(chartType: string): EChartsOption {
           type: 'value',
         },
         series: [],
+      }
+
+    case 'scatter':
+      return {
+        ...base,
+        xAxis: {
+          type: 'value',
+        },
+        yAxis: {
+          type: 'value',
+        },
+        series: [],
+      }
+
+    case 'gauge':
+      return {
+        ...base,
+        series: [
+          {
+            type: 'gauge',
+            detail: { formatter: '{value}' },
+            data: [{ value: 0, name: '' }],
+          },
+        ],
       }
 
     default:

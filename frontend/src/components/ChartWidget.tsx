@@ -87,8 +87,8 @@ function buildChartOption(
     }
   }
 
-  // For pie chart
-  if (chartType === 'pie') {
+  // For pie / donut chart
+  if (chartType === 'pie' || chartType === 'donut') {
     const labelCol = columns[0]
     const valueCol = columns.length > 1 ? columns[1] : columns[0]
     const pieData = data.map((row) => ({
@@ -96,7 +96,7 @@ function buildChartOption(
       value: Number(row[valueCol]) || 0,
     }))
 
-    const pieDefaults = getChartDefaults('pie') as Record<string, unknown>
+    const pieDefaults = getChartDefaults(chartType) as Record<string, unknown>
     return {
       ...pieDefaults,
       ...customConfig,
@@ -104,7 +104,7 @@ function buildChartOption(
       series: [
         {
           type: 'pie',
-          radius: ['35%', '65%'],
+          radius: chartType === 'donut' ? ['45%', '70%'] : ['0%', '70%'],
           center: ['50%', '50%'],
           data: pieData,
           label: {
@@ -124,7 +124,64 @@ function buildChartOption(
     }
   }
 
-  // For bar, line, area charts — use first column as category, remaining as series
+  // For scatter plot
+  if (chartType === 'scatter') {
+    const xCol = columns[0]
+    const yCol = columns.length > 1 ? columns[1] : columns[0]
+    const sizeCol = columns.length > 2 ? columns[2] : null
+
+    const scatterData = data.map((row) => {
+      const x = Number(row[xCol]) || 0
+      const y = Number(row[yCol]) || 0
+      const size = sizeCol ? Number(row[sizeCol]) || 10 : 10
+      return [x, y, size]
+    })
+
+    return {
+      ...defaults,
+      ...customConfig,
+      tooltip: {
+        trigger: 'item',
+        formatter: `{a}<br/>${xCol}: {c0}<br/>${yCol}: {c1}`,
+      },
+      xAxis: { type: 'value', name: xCol },
+      yAxis: { type: 'value', name: yCol },
+      series: [{
+        type: 'scatter',
+        symbolSize: sizeCol ? (val: number[]) => Math.sqrt(val[2]) * 2 : 12,
+        data: scatterData,
+        itemStyle: { color: '#6366f1' },
+      }],
+    }
+  }
+
+  // For gauge chart
+  if (chartType === 'gauge') {
+    const valueCol = columns[columns.length - 1]
+    const rawVal = data.length > 0 ? Number(data[0][valueCol]) || 0 : 0
+
+    const gaugeDefaults = getChartDefaults('gauge') as Record<string, unknown>
+    return {
+      ...gaugeDefaults,
+      ...customConfig,
+      series: [{
+        type: 'gauge',
+        min: 0,
+        max: 100,
+        progress: { show: true, width: 18 },
+        axisLine: { lineStyle: { width: 18 } },
+        axisTick: { show: false },
+        splitLine: { length: 10, lineStyle: { width: 2 } },
+        pointer: { width: 5 },
+        axisLabel: { distance: 20, fontSize: 10 },
+        detail: { valueAnimation: true, fontSize: 20, offsetCenter: [0, '70%'], formatter: '{value}' },
+        title: { offsetCenter: [0, '90%'] },
+        data: [{ value: rawVal, name: valueCol }],
+      }],
+    }
+  }
+
+  // For bar, stacked_bar, line, area charts — first column = category, remaining = series
   const categoryCol = columns[0]
   const categoryData = data.map((row) => String(row[categoryCol] ?? ''))
   const valueCols = columns.slice(1)
@@ -134,15 +191,19 @@ function buildChartOption(
     '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#64748b',
   ]
 
+  const isStacked = chartType === 'stacked_bar'
+  const seriesType = isStacked ? 'bar' : (chartType === 'area' ? 'line' : chartType)
+
   const series = valueCols.map((col, idx) => ({
     name: col,
-    type: chartType === 'area' ? 'line' : chartType,
+    type: seriesType,
+    stack: isStacked ? 'total' : undefined,
     data: data.map((row) => Number(row[col]) || 0),
     smooth: chartType === 'line' || chartType === 'area',
     areaStyle: chartType === 'area' ? { opacity: 0.3 } : undefined,
     itemStyle: {
       color: seriesColors[idx % seriesColors.length],
-      borderRadius: chartType === 'bar' ? [4, 4, 0, 0] : undefined,
+      borderRadius: (chartType === 'bar' || isStacked) && !isStacked ? [4, 4, 0, 0] : undefined,
     },
     barMaxWidth: 40,
   }))
@@ -153,7 +214,7 @@ function buildChartOption(
     tooltip: {
       trigger: 'axis',
       axisPointer: {
-        type: chartType === 'bar' ? 'shadow' : 'cross',
+        type: chartType === 'bar' || isStacked ? 'shadow' : 'cross',
       },
     },
     legend: valueCols.length > 1 ? { show: true, bottom: 0 } : { show: false },
@@ -250,6 +311,7 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
       const res = await api.post(`/datasets/${widget.datasetId}/query/`, {
         columns: widget.queryConfig?.columns || undefined,
         metrics: metrics || undefined,
+        date_truncs: widget.queryConfig?.date_truncs || undefined,
         filters: widget.queryConfig?.filters || [],
       })
 

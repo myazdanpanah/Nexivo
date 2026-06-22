@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useDashboardStore } from '../store/dashboardStore'
 import api from '../api/client'
-import { X, BarChart3, PieChart, TrendingUp, Table, Hash } from 'lucide-react'
+import { X, BarChart3, PieChart, TrendingUp, Table, Hash, Circle, Target, GitBranch } from 'lucide-react'
 import { formatKpiValue, DEFAULT_KPI_FORMAT, type KpiFormat } from '../utils/kpiFormat'
 
 interface WidgetConfigPanelProps {
@@ -11,9 +11,14 @@ interface WidgetConfigPanelProps {
 }
 
 const chartTypes = [
-  { value: 'bar', label: 'میله\u200cای', icon: BarChart3 },
+  { value: 'bar', label: 'میله‌ای', icon: BarChart3 },
+  { value: 'stacked_bar', label: 'میله‌ای انباشته', icon: BarChart3 },
   { value: 'line', label: 'خطی', icon: TrendingUp },
-  { value: 'pie', label: 'دایره\u200cای', icon: PieChart },
+  { value: 'area', label: 'سطحی', icon: TrendingUp },
+  { value: 'pie', label: 'دایره‌ای', icon: PieChart },
+  { value: 'donut', label: ' دونات', icon: Circle },
+  { value: 'scatter', label: 'پراکنده', icon: Target },
+  { value: 'gauge', label: 'گیج', icon: GitBranch },
   { value: 'table', label: 'جدول', icon: Table },
   { value: 'kpi', label: 'شاخص کلیدی', icon: Hash },
 ]
@@ -49,6 +54,10 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
   )
   const [metrics, setMetrics] = useState<Record<string, string>>(
     (widget?.queryConfig?.metrics as Record<string, string>) || {}
+  )
+  // Date granularity: { col: 'month' }
+  const [dateTruncs, setDateTruncs] = useState<Record<string, string>>(
+    (widget?.queryConfig?.date_truncs as Record<string, string>) || {}
   )
 
   // KPI formatting state
@@ -147,6 +156,12 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
       queryConfig.metrics = metrics
     } else {
       queryConfig.metrics = undefined
+    }
+    // Date truncs
+    if (Object.keys(dateTruncs).length > 0) {
+      queryConfig.date_truncs = dateTruncs
+    } else {
+      queryConfig.date_truncs = undefined
     }
 
     // Save KPI format in chartConfig
@@ -331,11 +346,58 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
                   onClick={() => {
                     setSelectedColumns([])
                     setMetrics({})
+                    setDateTruncs({})
                   }}
                   className="text-xs text-gray-500 hover:text-gray-700"
                 >
                   حذف انتخاب
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Date Granularity Picker */}
+          {selectedDataset && chartType !== 'table' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                گروه‌بندی تاریخ
+                <span className="text-xs text-gray-400 mr-2">
+                  (ستون‌های تاریخی را خودکار گروه‌بندی کنید)
+                </span>
+              </label>
+              <div className="space-y-1.5">
+                {selectedDataset.column_names
+                  .filter((col) => {
+                    const pgType = (selectedDataset.column_types[col] || '').toUpperCase()
+                    return pgType.includes('TIMESTAMP') || pgType.includes('DATE') || pgType.includes('TIME')
+                  })
+                  .map((col) => (
+                    <div key={col} className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded-lg">
+                      <span className="text-sm text-gray-700 flex-1">{col}</span>
+                      <select
+                        value={dateTruncs[col] || ''}
+                        onChange={(e) => {
+                          setDateTruncs((prev) => {
+                            const next = { ...prev }
+                            if (e.target.value) {
+                              next[col] = e.target.value
+                            } else {
+                              delete next[col]
+                            }
+                            return next
+                          })
+                        }}
+                        className="text-xs px-2 py-1 rounded-lg border border-gray-300 focus:ring-1 focus:ring-indigo-500 outline-none"
+                      >
+                        <option value="">بدون گروه‌بندی</option>
+                        <option value="year">سال</option>
+                        <option value="quarter">فصل</option>
+                        <option value="month">ماه</option>
+                        <option value="week">هفته</option>
+                        <option value="day">روز</option>
+                      </select>
+                    </div>
+                  ))}
               </div>
             </div>
           )}

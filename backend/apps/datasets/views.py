@@ -115,6 +115,7 @@ def dataset_detail(request, pk):
 
 
 AGG_FUNCTIONS = {"SUM", "COUNT", "AVG", "MIN", "MAX", "COUNT_DISTINCT"}
+DATE_TRUNC_UNITS = {"year", "quarter", "month", "week", "day", "hour"}
 
 
 @api_view(["POST"])
@@ -213,8 +214,11 @@ def dataset_query(request, pk):
 
     where_sql = " AND ".join(where_clauses) if where_clauses else "TRUE"
 
+    # Date grouping: {"col": "month"} -> DATE_TRUNC('month', col)
+    date_truncs = request.data.get("date_truncs", {})  # {col: unit}
+
     # --- Aggregation (GROUP BY) path ---
-    if metrics_map:
+    if metrics_map or date_truncs:
         metric_cols = list(metrics_map.keys())
         dim_cols = [c for c in columns if c not in metric_cols]
 
@@ -224,13 +228,28 @@ def dataset_query(request, pk):
             dim_cols = [columns[0]]
             metric_cols = [c for c in metric_cols if c != columns[0]]
 
-        select_parts = [f'"{c}"' for c in dim_cols]
+        select_parts = []
+        for c in dim_cols:
+            if c in date_truncs and date_truncs[c] in DATE_TRUNC_UNITS:
+                unit = date_truncs[c]
+                alias = f"{c}_{unit}"
+                select_parts.append(f'DATE_TRUNC('{unit}', "{c}")::DATE AS "{alias}"')
+            else:
+                select_parts.append(f'"{c}"')
         for col in metric_cols:
             func = metrics_map[col].upper()
             alias = col
             select_parts.append(f'{func}("{col}") AS "{alias}"')
 
-        group_by = ", ".join([f'"{c}"' for c in dim_cols])
+        # Build GROUP BY using the same expressions as SELECT for date_truncs
+        group_by_parts = []
+        for c in dim_cols:
+            if c in date_truncs and date_truncs[c] in DATE_TRUNC_UNITS:
+                unit = date_truncs[c]
+                group_by_parts.append(f'DATE_TRUNC('{unit}', "{c}")')
+            else:
+                group_by_parts.append(f'"{c}"')
+        group_by = ", ".join(group_by_parts)
         order_by = group_by  # order by dimension(s)
 
         query = (
