@@ -72,7 +72,7 @@ export default function DashboardBuilderPage() {
         chart_config: {},
         query_config: {},
         grid_x: 0,
-        grid_y: Infinity,
+        grid_y: 0,
         grid_w: 6,
         grid_h: 4,
       })

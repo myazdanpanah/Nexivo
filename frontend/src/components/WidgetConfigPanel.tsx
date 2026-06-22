@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useDashboardStore } from '../store/dashboardStore'
 import api from '../api/client'
-import { X, BarChart3, PieChart, TrendingUp, Table } from 'lucide-react'
+import { X, BarChart3, PieChart, TrendingUp, Table, Hash } from 'lucide-react'
 
 interface WidgetConfigPanelProps {
   widgetId: string
@@ -14,12 +14,38 @@ const chartTypes = [
   { value: 'line', label: 'خطی', icon: TrendingUp },
   { value: 'pie', label: 'دایره\u200cای', icon: PieChart },
   { value: 'table', label: 'جدول', icon: Table },
+  { value: 'kpi', label: 'شاخص کلیدی', icon: Hash },
 ]
+
+const AGG_OPTIONS = ['SUM', 'COUNT', 'AVG', 'MIN', 'MAX'] as const
+
+const NUMERIC_TYPES = new Set([
+  'BIGINT', 'INTEGER', 'SMALLINT', 'DOUBLE PRECISION',
+  'REAL', 'NUMERIC', 'DECIMAL', 'FLOAT',
+  'INT64', 'FLOAT64',
+])
 
 interface Dataset {
   id: number
   name: string
   column_names: string[]
+  column_types: Record<string, string>
+}
+
+interface KpiFormat {
+  type: 'auto' | 'number' | 'currency' | 'percentage'
+  currency: string
+  decimals: number
+  prefix: string
+  suffix: string
+}
+
+const DEFAULT_KPI_FORMAT: KpiFormat = {
+  type: 'auto',
+  currency: '$',
+  decimals: 0,
+  prefix: '',
+  suffix: '',
 }
 
 export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPanelProps) {
@@ -34,6 +60,13 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
   const [selectedColumns, setSelectedColumns] = useState<string[]>(
     (widget?.queryConfig?.columns as string[]) || []
   )
+  const [metrics, setMetrics] = useState<Record<string, string>>(
+    (widget?.queryConfig?.metrics as Record<string, string>) || {}
+  )
+
+  // KPI formatting state
+  const savedKpiFormat = (widget?.chartConfig as Record<string, unknown>)?.kpiFormat as KpiFormat | undefined
+  const [kpiFormat, setKpiFormat] = useState<KpiFormat>(savedKpiFormat || DEFAULT_KPI_FORMAT)
 
   const selectedDataset = datasets.find((d) => d.id === selectedDatasetId)
 
@@ -41,18 +74,49 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
     fetchDatasets()
   }, [])
 
-  // When dataset changes, auto-select all columns
+  // When dataset changes, auto-select all columns and auto-assign metrics from column types
   const prevDatasetIdRef = useRef<number | null>(selectedDatasetId)
   useEffect(() => {
     if (selectedDatasetId !== prevDatasetIdRef.current) {
       prevDatasetIdRef.current = selectedDatasetId
       if (selectedDataset) {
         setSelectedColumns(selectedDataset.column_names)
+        if (chartType !== 'table') {
+          const autoMetrics: Record<string, string> = {}
+          for (const col of selectedDataset.column_names) {
+            const pgType = (selectedDataset.column_types[col] || '').toUpperCase()
+            if (NUMERIC_TYPES.has(pgType)) {
+              autoMetrics[col] = 'SUM'
+            }
+          }
+          setMetrics(autoMetrics)
+        } else {
+          setMetrics({})
+        }
       } else {
         setSelectedColumns([])
+        setMetrics({})
       }
     }
-  }, [selectedDatasetId, selectedDataset])
+  }, [selectedDatasetId, selectedDataset, chartType])
+
+  // When chart type changes to/from table, update metrics accordingly
+  useEffect(() => {
+    if (!selectedDataset) return
+    if (chartType === 'table') {
+      setMetrics({})
+    } else {
+      const autoMetrics: Record<string, string> = {}
+      for (const col of selectedColumns) {
+        const pgType = (selectedDataset.column_types[col] || '').toUpperCase()
+        if (NUMERIC_TYPES.has(pgType)) {
+          autoMetrics[col] = metrics[col] || 'SUM'
+        }
+      }
+      setMetrics(autoMetrics)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartType])
 
   const fetchDatasets = async () => {
     try {
@@ -63,29 +127,64 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
     }
   }
 
+  const toggleColumn = (col: string) => {
+    setSelectedColumns((prev) => (prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]))
+  }
+
+  const toggleMetric = (col: string) => {
+    setMetrics((prev) => {
+      const next = { ...prev }
+      if (next[col]) {
+        delete next[col] // metric → dimension
+      } else {
+        next[col] = 'SUM' // dimension → metric
+      }
+      return next
+    })
+  }
+
+  const setAggFunc = (col: string, func: string) => {
+    setMetrics((prev) => ({ ...prev, [col]: func }))
+  }
+
+  const isMetric = (col: string) => col in metrics
+
   const handleSave = async () => {
     if (!widget) return
+
+    const queryConfig: Record<string, unknown> = {
+      ...widget.queryConfig,
+      columns: selectedColumns.length > 0 ? selectedColumns : undefined,
+    }
+    if (chartType !== 'table' && Object.keys(metrics).length > 0) {
+      queryConfig.metrics = metrics
+    } else {
+      queryConfig.metrics = undefined
+    }
+
+    // Save KPI format in chartConfig
+    const chartConfig: Record<string, unknown> = {
+      ...widget.chartConfig,
+    }
+    if (chartType === 'kpi') {
+      chartConfig.kpiFormat = kpiFormat
+    }
 
     try {
       await api.put(`/dashboards/${dashboardId}/widgets/${widgetId}/`, {
         title,
         chart_type: chartType,
         dataset: selectedDatasetId,
-        chart_config: widget.chartConfig,
-        query_config: {
-          ...widget.queryConfig,
-          columns: selectedColumns.length > 0 ? selectedColumns : undefined,
-        },
+        chart_config: chartConfig,
+        query_config: queryConfig,
       })
 
       updateWidget(widgetId, {
         title,
         chartType,
         datasetId: selectedDatasetId,
-        queryConfig: {
-          ...widget.queryConfig,
-          columns: selectedColumns.length > 0 ? selectedColumns : undefined,
-        },
+        queryConfig,
+        chartConfig,
       })
 
       onClose()
@@ -164,47 +263,75 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
             </select>
           </div>
 
-          {/* Column Picker */}
+          {/* Column Picker with Dimension / Metric roles */}
           {selectedDataset && selectedDataset.column_names.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 ستون\u200cها
-                <span className="text-xs text-gray-400 mr-2">
-                  ({chartType === 'table' ? 'ستون\u200cهای نمایشی' : 'ستون اول = دسته\u200cبندی، بقیه = مقادیر'})
-                </span>
+                {chartType !== 'table' && (
+                  <span className="text-xs text-gray-400 mr-2">
+                    (روی برچسب کلیک کنید تا بین دسته/مقدار تغییر کند)
+                  </span>
+                )}
               </label>
-              <div className="space-y-1.5 max-h-48 overflow-y-auto border border-gray-200 rounded-xl p-3">
-                {selectedDataset.column_names.map((col) => (
-                  <label
-                    key={col}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer transition"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedColumns.includes(col)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedColumns([...selectedColumns, col])
-                        } else {
-                          setSelectedColumns(selectedColumns.filter((c) => c !== col))
-                        }
-                      }}
-                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">{col}</span>
-                    {chartType !== 'table' && selectedColumns.indexOf(col) === 0 && selectedColumns.includes(col) && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded-full">
-                        دسته
-                      </span>
-                    )}
-                    {chartType !== 'table' && selectedColumns.indexOf(col) > 0 && selectedColumns.includes(col) && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded-full">
-                        مقدار
-                      </span>
-                    )}
-                  </label>
-                ))}
+              <div className="space-y-1.5 max-h-56 overflow-y-auto border border-gray-200 rounded-xl p-3">
+                {selectedDataset.column_names.map((col) => {
+                  const checked = selectedColumns.includes(col)
+                  const metric = isMetric(col)
+                  return (
+                    <div
+                      key={col}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition ${
+                        checked ? 'bg-gray-50' : 'opacity-50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleColumn(col)}
+                        className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                      />
+                      <span className="text-sm text-gray-700 flex-1">{col}</span>
+
+                      {/* Role badge + agg picker (only for non-table charts) */}
+                      {chartType !== 'table' && checked && (
+                        <div className="flex items-center gap-1">
+                          {metric ? (
+                            <div className="flex items-center gap-0.5">
+                              <select
+                                value={metrics[col]}
+                                onChange={(e) => setAggFunc(col, e.target.value)}
+                                className="text-[10px] px-1 py-0.5 bg-amber-100 text-amber-700 rounded-full border-0 outline-none cursor-pointer font-medium"
+                                title="تابع تجمیع"
+                              >
+                                {AGG_OPTIONS.map((f) => (
+                                  <option key={f} value={f}>{f}</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => toggleMetric(col)}
+                                className="text-[10px] w-3.5 h-3.5 flex items-center justify-center text-amber-500 hover:text-amber-700 hover:bg-amber-200 rounded-full transition"
+                                title="تبدیل به دسته"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => toggleMetric(col)}
+                              className="text-[10px] px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded-full hover:bg-indigo-200 transition font-medium"
+                              title="تبدیل به مقدار"
+                            >
+                              دسته
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
+
               <div className="flex items-center gap-2 mt-2">
                 <button
                   onClick={() => setSelectedColumns(selectedDataset.column_names)}
@@ -214,11 +341,118 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
                 </button>
                 <span className="text-gray-300">|</span>
                 <button
-                  onClick={() => setSelectedColumns([])}
+                  onClick={() => {
+                    setSelectedColumns([])
+                    setMetrics({})
+                  }}
                   className="text-xs text-gray-500 hover:text-gray-700"
                 >
                   حذف انتخاب
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* KPI Number Formatting */}
+          {chartType === 'kpi' && (
+            <div className="border border-gray-200 rounded-xl p-4 space-y-4">
+              <label className="block text-sm font-medium text-gray-700">قالب عدد</label>
+
+              {/* Format type */}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">نوع قالب</label>
+                <select
+                  value={kpiFormat.type}
+                  onChange={(e) => setKpiFormat({ ...kpiFormat, type: e.target.value as KpiFormat['type'] })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                >
+                  <option value="auto">خودکار</option>
+                  <option value="number">عدد</option>
+                  <option value="currency">ارز</option>
+                  <option value="percentage">درصد</option>
+                </select>
+              </div>
+
+              {/* Currency symbol (only for currency) */}
+              {kpiFormat.type === 'currency' && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">نماد ارز</label>
+                  <input
+                    type="text"
+                    value={kpiFormat.currency}
+                    onChange={(e) => setKpiFormat({ ...kpiFormat, currency: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                    placeholder="$"
+                    maxLength={5}
+                  />
+                </div>
+              )}
+
+              {/* Decimal places */}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">اعداد اعشاری: {kpiFormat.decimals}</label>
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  value={kpiFormat.decimals}
+                  onChange={(e) => setKpiFormat({ ...kpiFormat, decimals: parseInt(e.target.value) })}
+                  className="w-full accent-indigo-600"
+                />
+                <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>0</span>
+                  <span>5</span>
+                  <span>10</span>
+                </div>
+              </div>
+
+              {/* Prefix */}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">پیشوند</label>
+                <input
+                  type="text"
+                  value={kpiFormat.prefix}
+                  onChange={(e) => setKpiFormat({ ...kpiFormat, prefix: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                  placeholder="مثلاً: "
+                  maxLength={10}
+                />
+              </div>
+
+              {/* Suffix */}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">پسوند</label>
+                <input
+                  type="text"
+                  value={kpiFormat.suffix}
+                  onChange={(e) => setKpiFormat({ ...kpiFormat, suffix: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                  placeholder="مثلاً: تومان"
+                  maxLength={10}
+                />
+              </div>
+
+              {/* Preview */}
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <span className="text-[10px] text-gray-400 block mb-1">پیش‌نمایش</span>
+                <span className="text-lg font-bold text-indigo-600">
+                  {(() => {
+                    const dec = kpiFormat.decimals ?? 0
+                    const previewNum = 12345.6789
+                    let formatted: string
+                    if (kpiFormat.type === 'currency') {
+                      formatted = `${kpiFormat.currency || '$'}${previewNum.toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec })}`
+                    } else if (kpiFormat.type === 'percentage') {
+                      formatted = `${(previewNum * 100).toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec })}%`
+                    } else if (kpiFormat.type === 'number') {
+                      formatted = previewNum.toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec })
+                    } else {
+                      // auto
+                      formatted = previewNum.toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec })
+                    }
+                    return `${kpiFormat.prefix || ''}${formatted}${kpiFormat.suffix ? ` ${kpiFormat.suffix}` : ''}`
+                  })()}
+                </span>
               </div>
             </div>
           )}

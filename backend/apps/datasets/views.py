@@ -114,11 +114,23 @@ def dataset_detail(request, pk):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+AGG_FUNCTIONS = {"SUM", "COUNT", "AVG", "MIN", "MAX", "COUNT_DISTINCT"}
+
+
 @api_view(["POST"])
 def dataset_query(request, pk):
     """
-    Query dataset with role-based filters applied.
-    Returns chart-ready data.
+    Query dataset with role-based filters and optional aggregation.
+
+    Request body:
+      columns: ["region", "revenue", "cost"]   # all columns to include
+      metrics: {"revenue": "SUM", "cost": "AVG"}  # col -> agg func
+      filters: [{col, op, val}, ...]
+
+    When *metrics* is provided the backend generates a GROUP BY query:
+      SELECT region, SUM(revenue), AVG(cost) FROM ... GROUP BY region
+
+    When *metrics* is empty/absent it returns raw rows (unchanged behaviour).
     """
     try:
         dataset = Dataset.objects.get(pk=pk)
@@ -134,7 +146,7 @@ def dataset_query(request, pk):
 
     # Build query parameters
     requested_columns = request.data.get("columns", dataset.column_names)
-    metrics = request.data.get("metrics", [])
+    metrics_map = request.data.get("metrics", {})  # {col: FUNC}
     additional_filters = request.data.get("filters", [])
 
     # Validate requested columns against dataset schema to prevent SQL injection
@@ -145,6 +157,19 @@ def dataset_query(request, pk):
             {"error": "No valid columns requested"},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+    # Validate aggregation function names
+    for col, func in metrics_map.items():
+        if func.upper() not in AGG_FUNCTIONS:
+            return Response(
+                {"error": f"Invalid aggregation function: {func}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if col not in valid_columns:
+            return Response(
+                {"error": f"Invalid metric column: {col}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     # Add role-based filters
     for rf in filters:
@@ -162,10 +187,9 @@ def dataset_query(request, pk):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    # TODO: Forward to Superset Chart Data API
-    # For now, query directly from PostgreSQL
     from django.db import connection
 
+    # Build WHERE clause
     where_clauses = []
     params = []
     for f in additional_filters:
@@ -180,11 +204,47 @@ def dataset_query(request, pk):
         elif f["op"] == "contains":
             where_clauses.append(f'"{col}" ILIKE %s')
             params.append(f"%{f['val']}%")
+        elif f["op"] == "gt":
+            where_clauses.append(f'"{col}" > %s')
+            params.append(f["val"])
+        elif f["op"] == "lt":
+            where_clauses.append(f'"{col}" < %s')
+            params.append(f["val"])
 
     where_sql = " AND ".join(where_clauses) if where_clauses else "TRUE"
-    cols = ", ".join([f'"{c}"' for c in columns])
 
-    query = f'SELECT {cols} FROM "{dataset.table_name}" WHERE {where_sql} LIMIT 1000'
+    # --- Aggregation (GROUP BY) path ---
+    if metrics_map:
+        metric_cols = list(metrics_map.keys())
+        dim_cols = [c for c in columns if c not in metric_cols]
+
+        # If no explicit dimensions, use columns not in metrics as dims
+        # If ALL columns are metrics, pick the first as dimension
+        if not dim_cols and columns:
+            dim_cols = [columns[0]]
+            metric_cols = [c for c in metric_cols if c != columns[0]]
+
+        select_parts = [f'"{c}"' for c in dim_cols]
+        for col in metric_cols:
+            func = metrics_map[col].upper()
+            alias = col
+            select_parts.append(f'{func}("{col}") AS "{alias}"')
+
+        group_by = ", ".join([f'"{c}"' for c in dim_cols])
+        order_by = group_by  # order by dimension(s)
+
+        query = (
+            f'SELECT {", ".join(select_parts)} '
+            f'FROM "{dataset.table_name}" '
+            f'WHERE {where_sql} '
+            f'GROUP BY {group_by} '
+            f'ORDER BY {order_by} '
+            f'LIMIT 1000'
+        )
+    else:
+        # --- Raw rows path (unchanged) ---
+        cols = ", ".join([f'"{c}"' for c in columns])
+        query = f'SELECT {cols} FROM "{dataset.table_name}" WHERE {where_sql} LIMIT 1000'
 
     with connection.cursor() as cursor:
         cursor.execute(query, params)

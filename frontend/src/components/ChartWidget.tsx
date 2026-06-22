@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
-import ReactECharts from 'echarts-for-react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import * as echarts from 'echarts'
 import { applyRTL } from '../utils/rtlConfig'
 import { getChartDefaults } from '../utils/chartDefaults'
 import api from '../api/client'
@@ -11,6 +11,45 @@ interface Widget {
   datasetId: number | null
   chartConfig: Record<string, unknown>
   queryConfig: Record<string, unknown>
+}
+
+/**
+ * For chart types that need aggregation, auto-build a metrics map.
+ * Convention: first column = dimension (GROUP BY), rest = metrics (SUM).
+ * If the widget already carries explicit metrics in queryConfig, use those.
+ */
+function buildMetrics(
+  chartType: string,
+  queryConfig: Record<string, unknown> | undefined
+): Record<string, string> | undefined {
+  // Tables never aggregate
+  if (chartType === 'table') return undefined
+
+  // Use explicit metrics if provided
+  if (queryConfig?.metrics && typeof queryConfig.metrics === 'object') {
+    const m = queryConfig.metrics as Record<string, string>
+    return Object.keys(m).length > 0 ? m : undefined
+  }
+
+  const cols = (queryConfig?.columns as string[]) || []
+  if (cols.length === 0) return undefined
+
+  // KPI: no dimension — all columns are metrics
+  if (chartType === 'kpi') {
+    const metrics: Record<string, string> = {}
+    for (const col of cols) {
+      metrics[col] = 'SUM'
+    }
+    return metrics
+  }
+
+  // Bar/line/pie/area: first column = dimension, rest = SUM metrics
+  if (cols.length <= 1) return undefined
+  const metrics: Record<string, string> = {}
+  for (let i = 1; i < cols.length; i++) {
+    metrics[cols[i]] = 'SUM'
+  }
+  return metrics
 }
 
 interface ChartWidgetProps {
@@ -140,47 +179,124 @@ function buildChartOption(
 }
 
 export default function ChartWidget({ widget }: ChartWidgetProps) {
-  const [option, setOption] = useState<Record<string, unknown> | null>(null)
+  const chartRef = useRef<HTMLDivElement>(null)
+  const chartInstance = useRef<echarts.ECharts | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [tableData, setTableData] = useState<{ columns: string[]; rows: Record<string, unknown>[] } | null>(null)
+  const [kpiData, setKpiData] = useState<{ label: string; value: string; sub?: string } | null>(null)
+
+  const usesECharts = widget.chartType !== 'table' && widget.chartType !== 'kpi'
+
+  // Initialize and dispose chart instance (skip for non-ECharts types)
+  useEffect(() => {
+    if (!chartRef.current || !usesECharts) return
+
+    const chart = echarts.init(chartRef.current, undefined, { renderer: 'svg' })
+    chartInstance.current = chart
+
+    // ResizeObserver handles both window resizes AND grid layout drag/resize
+    const resizeObserver = new ResizeObserver(() => {
+      if (!chart.isDisposed()) {
+        chart.resize()
+      }
+    })
+    resizeObserver.observe(chartRef.current)
+
+    return () => {
+      resizeObserver.disconnect()
+      if (!chart.isDisposed()) {
+        chart.dispose()
+      }
+      chartInstance.current = null
+    }
+  }, [usesECharts])
 
   const fetchData = useCallback(async () => {
-    // Clear table data when fetching new data
     setTableData(null)
+    setKpiData(null)
+    setError(null)
+
+    // For non-ECharts types (table, kpi), skip the chart-instance guard
+    if (usesECharts && (!chartInstance.current || chartInstance.current.isDisposed())) {
+      return
+    }
 
     if (!widget.datasetId) {
-      setOption({
-        graphic: {
-          type: 'text',
-          left: 'center',
-          top: 'middle',
-          style: {
-            text: 'منبع داده تعیین نشده\nاز پنل تنظیمات، مجموعه داده را انتخاب کنید',
-            fontSize: 13,
-            fill: '#9ca3af',
-            textAlign: 'center',
-            lineHeight: 20,
+      if (usesECharts && chartInstance.current && !chartInstance.current.isDisposed()) {
+        chartInstance.current.setOption({
+          graphic: {
+            type: 'text',
+            left: 'center',
+            top: 'middle',
+            style: {
+              text: 'منبع داده تعیین نشده\nاز پنل تنظیمات، مجموعه داده را انتخاب کنید',
+              fontSize: 13,
+              fill: '#9ca3af',
+              textAlign: 'center',
+              lineHeight: 20,
+            },
           },
-        },
-      })
+        }, true)
+      }
       return
     }
 
     setLoading(true)
 
     try {
+      const metrics = buildMetrics(widget.chartType, widget.queryConfig)
       const res = await api.post(`/datasets/${widget.datasetId}/query/`, {
         columns: widget.queryConfig?.columns || undefined,
+        metrics: metrics || undefined,
         filters: widget.queryConfig?.filters || [],
       })
 
       const result: QueryResult = res.data
 
-      // Table chart: store data in separate state
+      // Re-check instance is still alive after async gap (ECharts types only)
+      const chart = chartInstance.current
+      if (usesECharts && (!chart || chart.isDisposed())) return
+
       if (widget.chartType === 'table') {
         setTableData({ columns: result.columns, rows: result.data })
-        setOption(null)
+      } else if (widget.chartType === 'kpi') {
+        // KPI: show first metric value as big number with formatting
+        const metricCols = Object.keys(metrics || {})
+        const valueCol = metricCols[0] || result.columns[result.columns.length - 1]
+        const rawVal = result.data.length > 0 ? result.data[0][valueCol] : 0
+        const num = Number(rawVal) || 0
+
+        const fmt = (widget.chartConfig as Record<string, unknown>)?.kpiFormat as {
+          type?: string; currency?: string; decimals?: number; prefix?: string; suffix?: string
+        } | undefined
+
+        let formatted: string
+        if (fmt?.type === 'currency') {
+          formatted = `${fmt.currency || '$'}${num.toLocaleString(undefined, { minimumFractionDigits: fmt.decimals ?? 2, maximumFractionDigits: fmt.decimals ?? 2 })}`
+        } else if (fmt?.type === 'percentage') {
+          formatted = `${(num * 100).toLocaleString(undefined, { minimumFractionDigits: fmt.decimals ?? 1, maximumFractionDigits: fmt.decimals ?? 1 })}%`
+        } else if (fmt?.type === 'number') {
+          formatted = num.toLocaleString(undefined, { minimumFractionDigits: fmt.decimals ?? 0, maximumFractionDigits: fmt.decimals ?? 0 })
+        } else {
+          // Auto: compact notation
+          formatted = num >= 1_000_000
+            ? `${(num / 1_000_000).toFixed(1)}M`
+            : num >= 1_000
+              ? `${(num / 1_000).toFixed(1)}K`
+              : num.toLocaleString()
+        }
+
+        const prefix = fmt?.prefix || ''
+        const suffix = fmt?.suffix ? ` ${fmt.suffix}` : ''
+
+        setKpiData({
+          label: valueCol,
+          value: `${prefix}${formatted}${suffix}`,
+          sub: `${result.row_count} ردیف`,
+        })
       } else {
+        if (!chart) return
         const chartOption = buildChartOption(
           widget.chartType,
           result,
@@ -191,31 +307,21 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
           chartOption as import('echarts').EChartsOption,
           isRTL
         )
-        setOption(finalOption as Record<string, unknown>)
+        chart.setOption(finalOption as Record<string, unknown>, true)
       }
     } catch (err: unknown) {
       console.error('Chart fetch error:', err)
       const message = err instanceof Error ? err.message : 'خطا در بارگذاری داده'
-      setOption({
-        graphic: {
-          type: 'text',
-          left: 'center',
-          top: 'middle',
-          style: {
-            text: `خطا: ${message}`,
-            fontSize: 12,
-            fill: '#ef4444',
-            textAlign: 'center',
-          },
-        },
-      })
+      setError(message)
     } finally {
       setLoading(false)
     }
-  }, [widget.datasetId, widget.chartType, widget.chartConfig, widget.queryConfig])
+  }, [usesECharts, widget.datasetId, widget.chartType, widget.chartConfig, widget.queryConfig])
 
   useEffect(() => {
-    fetchData()
+    // Small delay to ensure chart init effect runs first (StrictMode safe)
+    const timer = setTimeout(() => fetchData(), 0)
+    return () => clearTimeout(timer)
   }, [fetchData])
 
   if (loading) {
@@ -229,7 +335,6 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
     )
   }
 
-  // Render table using separate state (not smuggled through ECharts option)
   if (widget.chartType === 'table' && tableData) {
     return (
       <div className="h-full overflow-auto">
@@ -259,20 +364,59 @@ export default function ChartWidget({ widget }: ChartWidgetProps) {
     )
   }
 
-  if (!option) {
+  // KPI card rendering
+  if (widget.chartType === 'kpi') {
+    if (error) {
+      return (
+        <div className="flex items-center justify-center h-full p-4">
+          <span className="text-sm text-red-500 text-center">خطا: {error}</span>
+        </div>
+      )
+    }
+    if (kpiData) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full p-4">
+          <span className="text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
+            {kpiData.label}
+          </span>
+          <span className="text-3xl font-extrabold text-indigo-600 leading-none">
+            {kpiData.value}
+          </span>
+          {kpiData.sub && (
+            <span className="text-xs text-gray-400 mt-2">{kpiData.sub}</span>
+          )}
+        </div>
+      )
+    }
     return (
       <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-        در حال بارگذاری...
+        منبع داده تعیین نشده
+      </div>
+    )
+  }
+
+  // Table error display
+  if (widget.chartType === 'table' && error) {
+    return (
+      <div className="flex items-center justify-center h-full p-4">
+        <span className="text-sm text-red-500 text-center">خطا: {error}</span>
+      </div>
+    )
+  }
+
+  // ECharts error display (for bar/line/pie/area)
+  if (error && !loading) {
+    return (
+      <div className="flex items-center justify-center h-full p-4">
+        <span className="text-sm text-red-500 text-center">خطا: {error}</span>
       </div>
     )
   }
 
   return (
-    <ReactECharts
-      option={option}
-      style={{ height: '100%', width: '100%' }}
-      opts={{ renderer: 'svg' }}
-      notMerge={true}
+    <div
+      ref={chartRef}
+      style={{ height: '100%', width: '100%', minHeight: '200px' }}
     />
   )
 }

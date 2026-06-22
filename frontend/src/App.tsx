@@ -5,27 +5,20 @@ import DashboardListPage from './pages/DashboardListPage'
 import DashboardBuilderPage from './pages/DashboardBuilderPage'
 import DataUploadPage from './pages/DataUploadPage'
 
-function App() {
-  const { token } = useAuthStore()
+function PrivateRoute({ children }: { children: React.ReactNode }) {
+  const token = useAuthStore((s) => s.token)
+  return token ? <>{children}</> : <Navigate to="/login" replace />
+}
 
-  if (!token) {
-    return (
-      <Routes>
-        <Route path="*" element={<LoginPage />} />
-      </Routes>
-    )
-  }
-
+export default function App() {
   return (
     <Routes>
+      <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<Navigate to="/dashboards" replace />} />
-      <Route path="/login" element={<Navigate to="/dashboards" replace />} />
-      <Route path="/dashboards" element={<DashboardListPage />} />
-      <Route path="/dashboards/:id" element={<DashboardBuilderPage />} />
-      <Route path="/data/upload" element={<DataUploadPage />} />
+      <Route path="/dashboards" element={<PrivateRoute><DashboardListPage /></PrivateRoute>} />
+      <Route path="/dashboards/:id" element={<PrivateRoute><DashboardBuilderPage /></PrivateRoute>} />
+      <Route path="/data/upload" element={<PrivateRoute><DataUploadPage /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/dashboards" replace />} />
     </Routes>
   )
 }
-
-export default App
