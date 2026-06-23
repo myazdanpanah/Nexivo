@@ -63,6 +63,13 @@ class DashboardPage(models.Model):
         help_text='Persisted page-level filter controls',
     )
 
+    # Page-level access control
+    allowed_roles = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Roles that can view this page (empty = same as dashboard)',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -92,6 +99,11 @@ class Widget(models.Model):
         ("kpi", "KPI Card"),
         ("heatmap", "Heatmap"),
         ("treemap", "Tree Map"),
+        ("sankey", "Sankey Diagram"),
+        ("funnel", "Funnel Chart"),
+        ("radar", "Radar Chart"),
+        ("graph", "Graph/Network"),
+        ("map", "Map"),
     ]
 
     dashboard = models.ForeignKey(Dashboard, on_delete=models.CASCADE, related_name="widgets")

@@ -9,8 +9,181 @@ from .serializers import (
     WidgetCreateSerializer,
     DashboardPageSerializer,
     DashboardPageCreateSerializer,
+    DashboardPageExportSerializer,
 )
 
+
+# ---- Dashboard Templates ----
+
+DASHBOARD_TEMPLATES = {
+    "sales": {
+        "name": "داشبورد فروش",
+        "description": "پیگیری عملکرد فروش، درآمد، و معاملات",
+        "pages": [
+            {
+                "name": "نمای کلی فروش",
+                "widgets": [
+                    {"title": "درآمد کل", "chart_type": "kpi", "grid_x": 0, "grid_y": 0, "grid_w": 3, "grid_h": 3},
+                    {"title": "تعداد معاملات", "chart_type": "kpi", "grid_x": 3, "grid_y": 0, "grid_w": 3, "grid_h": 3},
+                    {"title": "میانگین معامله", "chart_type": "kpi", "grid_x": 6, "grid_y": 0, "grid_w": 3, "grid_h": 3},
+                    {"title": "نرخ برد", "chart_type": "kpi", "grid_x": 9, "grid_y": 0, "grid_w": 3, "grid_h": 3},
+                    {"title": "روند درآمد", "chart_type": "line", "grid_x": 0, "grid_y": 3, "grid_w": 8, "grid_h": 5},
+                    {"title": "فروش بر اساس منطقه", "chart_type": "pie", "grid_x": 8, "grid_y": 3, "grid_w": 4, "grid_h": 5},
+                ],
+            },
+            {
+                "name": "جزئیات فروش",
+                "widgets": [
+                    {"title": "جدول معاملات", "chart_type": "table", "grid_x": 0, "grid_y": 0, "grid_w": 12, "grid_h": 6},
+                ],
+            },
+        ],
+    },
+    "finance": {
+        "name": "داشبورد مالی",
+        "description": "پیگیری بودجه، هزینه‌ها، و سود و زیان",
+        "pages": [
+            {
+                "name": "نمای کلی مالی",
+                "widgets": [
+                    {"title": "درآمد خالص", "chart_type": "kpi", "grid_x": 0, "grid_y": 0, "grid_w": 4, "grid_h": 3},
+                    {"title": "هزینه‌ها", "chart_type": "kpi", "grid_x": 4, "grid_y": 0, "grid_w": 4, "grid_h": 3},
+                    {"title": "سود خالص", "chart_type": "kpi", "grid_x": 8, "grid_y": 0, "grid_w": 4, "grid_h": 3},
+                    {"title": "روند سود و زیان", "chart_type": "area", "grid_x": 0, "grid_y": 3, "grid_w": 8, "grid_h": 5},
+                    {"title": "توزیع هزینه‌ها", "chart_type": "donut", "grid_x": 8, "grid_y": 3, "grid_w": 4, "grid_h": 5},
+                ],
+            },
+        ],
+    },
+    "marketing": {
+        "name": "داشبورد بازاریابی",
+        "description": "پیگیری کمپین‌ها، ترافیک، و نرخ تبدیل",
+        "pages": [
+            {
+                "name": "نمای کلی بازاریابی",
+                "widgets": [
+                    {"title": "ترافیک وب", "chart_type": "kpi", "grid_x": 0, "grid_y": 0, "grid_w": 3, "grid_h": 3},
+                    {"title": "نرخ تبدیل", "chart_type": "kpi", "grid_x": 3, "grid_y": 0, "grid_w": 3, "grid_h": 3},
+                    {"title": "هزینه هر مشتری", "chart_type": "kpi", "grid_x": 6, "grid_y": 0, "grid_w": 3, "grid_h": 3},
+                    {"title": "ROI کمپین", "chart_type": "kpi", "grid_x": 9, "grid_y": 0, "grid_w": 3, "grid_h": 3},
+                    {"title": "روند ترافیک", "chart_type": "line", "grid_x": 0, "grid_y": 3, "grid_w": 8, "grid_h": 5},
+                    {"title": "منابع ترافیک", "chart_type": "pie", "grid_x": 8, "grid_y": 3, "grid_w": 4, "grid_h": 5},
+                ],
+            },
+        ],
+    },
+    "hr": {
+        "name": "داشبورد منابع انسانی",
+        "description": "پیگیری کارکنان، جذب نیرو، و رضایت",
+        "pages": [
+            {
+                "name": "نمای کلی کارکنان",
+                "widgets": [
+                    {"title": "تعداد کل کارکنان", "chart_type": "kpi", "grid_x": 0, "grid_y": 0, "grid_w": 4, "grid_h": 3},
+                    {"title": "نرخ جابجایی", "chart_type": "kpi", "grid_x": 4, "grid_y": 0, "grid_w": 4, "grid_h": 3},
+                    {"title": "positions باز", "chart_type": "kpi", "grid_x": 8, "grid_y": 0, "grid_w": 4, "grid_h": 3},
+                    {"title": "ترکیب تیم‌ها", "chart_type": "pie", "grid_x": 0, "grid_y": 3, "grid_w": 6, "grid_h": 5},
+                    {"title": "روند استخدام", "chart_type": "bar", "grid_x": 6, "grid_y": 3, "grid_w": 6, "grid_h": 5},
+                ],
+            },
+        ],
+    },
+    "retail": {
+        "name": "داشبورد خرده‌فروشی",
+        "description": "پیگیری فروش، موجودی، و عملکرد محصولات",
+        "pages": [
+            {
+                "name": "نمای کلی فروشگاه",
+                "widgets": [
+                    {"title": "فروش روزانه", "chart_type": "kpi", "grid_x": 0, "grid_y": 0, "grid_w": 3, "grid_h": 3},
+                    {"title": "موجودی", "chart_type": "kpi", "grid_x": 3, "grid_y": 0, "grid_w": 3, "grid_h": 3},
+                    {"title": "میانگین سبد خرید", "chart_type": "kpi", "grid_x": 6, "grid_y": 0, "grid_w": 3, "grid_h": 3},
+                    {"title": "نرخ بازگشت", "chart_type": "kpi", "grid_x": 9, "grid_y": 0, "grid_w": 3, "grid_h": 3},
+                    {"title": "روند فروش", "chart_type": "area", "grid_x": 0, "grid_y": 3, "grid_w": 8, "grid_h": 5},
+                    {"title": "محصولات پرفروش", "chart_type": "bar", "grid_x": 8, "grid_y": 3, "grid_w": 4, "grid_h": 5},
+                ],
+            },
+            {
+                "name": "موجودی کالاها",
+                "widgets": [
+                    {"title": "جدول موجودی", "chart_type": "table", "grid_x": 0, "grid_y": 0, "grid_w": 12, "grid_h": 6},
+                ],
+            },
+        ],
+    },
+    "blank": {
+        "name": "داشبورد خالی",
+        "description": "شروع از صفر",
+        "pages": [
+            {
+                "name": "صفحه ۱",
+                "widgets": [],
+            },
+        ],
+    },
+}
+
+
+@api_view(["GET"])
+def dashboard_templates(request):
+    """List available dashboard templates."""
+    templates = []
+    for key, tmpl in DASHBOARD_TEMPLATES.items():
+        templates.append({
+            "id": key,
+            "name": tmpl["name"],
+            "description": tmpl["description"],
+            "page_count": len(tmpl["pages"]),
+            "widget_count": sum(len(p["widgets"]) for p in tmpl["pages"]),
+        })
+    return Response(templates)
+
+
+@api_view(["POST"])
+def dashboard_create_from_template(request):
+    """Create a dashboard from a template."""
+    template_id = request.data.get("template_id")
+    if template_id not in DASHBOARD_TEMPLATES:
+        return Response({"error": "Invalid template"}, status=status.HTTP_400_BAD_REQUEST)
+
+    tmpl = DASHBOARD_TEMPLATES[template_id]
+
+    # Create dashboard
+    dashboard = Dashboard.objects.create(
+        name=tmpl["name"],
+        description=tmpl["description"],
+        owner=request.user,
+        is_published=True,
+        allowed_roles=["ceo", "finance", "sales"],
+    )
+
+    # Create pages and widgets
+    for page_data in tmpl["pages"]:
+        page = DashboardPage.objects.create(
+            dashboard=dashboard,
+            name=page_data["name"],
+            order=tmpl["pages"].index(page_data),
+        )
+
+        for widget_data in page_data["widgets"]:
+            Widget.objects.create(
+                dashboard=dashboard,
+                page=page,
+                title=widget_data["title"],
+                chart_type=widget_data["chart_type"],
+                grid_x=widget_data.get("grid_x", 0),
+                grid_y=widget_data.get("grid_y", 0),
+                grid_w=widget_data.get("grid_w", 6),
+                grid_h=widget_data.get("grid_h", 4),
+            )
+
+    return Response(
+        DashboardSerializer(dashboard).data,
+        status=status.HTTP_201_CREATED,
+    )
+
+
+# ---- Dashboard CRUD ----
 
 @api_view(["GET", "POST"])
 def dashboard_list(request):
@@ -88,7 +261,6 @@ def dashboard_layout(request, pk):
     layout = request.data.get("layout", [])
 
     if page_id:
-        # Page-level layout
         try:
             page = DashboardPage.objects.get(pk=page_id, dashboard=dashboard)
         except DashboardPage.DoesNotExist:
@@ -96,7 +268,6 @@ def dashboard_layout(request, pk):
         page.layout = layout
         page.save()
     else:
-        # Dashboard-level layout (legacy)
         dashboard.layout = layout
         dashboard.save()
 
@@ -154,7 +325,6 @@ def page_create(request, dashboard_pk):
 
     serializer = DashboardPageCreateSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    # Auto-assign order if not provided
     if "order" not in serializer.validated_data:
         serializer.validated_data["order"] = dashboard.pages.count()
     page = serializer.save(dashboard=dashboard)
@@ -206,18 +376,16 @@ def page_duplicate(request, dashboard_pk, page_pk):
     except DashboardPage.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    # Create new page
     new_page = DashboardPage.objects.create(
         dashboard=dashboard,
         name=f"{source_page.name} (کپی)",
         order=dashboard.pages.count(),
         layout=source_page.layout,
         filter_controls=source_page.filter_controls,
+        allowed_roles=source_page.allowed_roles,
     )
 
-    # Duplicate all widgets on this page
-    source_widgets = source_page.widgets.all()
-    for widget in source_widgets:
+    for widget in source_page.widgets.all():
         Widget.objects.create(
             dashboard=dashboard,
             page=new_page,
@@ -264,6 +432,64 @@ def page_reorder(request, dashboard_pk):
             continue
 
     return Response(DashboardSerializer(dashboard).data)
+
+
+@api_view(["GET"])
+def page_export(request, dashboard_pk, page_pk):
+    """Export a page as JSON."""
+    try:
+        page = DashboardPage.objects.get(pk=page_pk, dashboard_id=dashboard_pk)
+    except DashboardPage.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    return Response(DashboardPageExportSerializer(page).data)
+
+
+@api_view(["POST"])
+def page_import(request, dashboard_pk):
+    """Import a page from JSON data."""
+    try:
+        dashboard = Dashboard.objects.get(pk=dashboard_pk)
+    except Dashboard.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.user.role != "ceo" and not request.user.is_staff:
+        if dashboard.owner != request.user:
+            return Response(
+                {"error": "Only the owner can import pages"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+    data = request.data
+    page = DashboardPage.objects.create(
+        dashboard=dashboard,
+        name=data.get("name", "صفحه وارد شده"),
+        order=dashboard.pages.count(),
+        layout=data.get("layout", []),
+        filter_controls=data.get("filter_controls", []),
+        allowed_roles=data.get("allowed_roles", []),
+    )
+
+    for widget_data in data.get("widgets", []):
+        Widget.objects.create(
+            dashboard=dashboard,
+            page=page,
+            title=widget_data.get("title", "نمودار"),
+            chart_type=widget_data.get("chart_type", "bar"),
+            dataset_id=widget_data.get("dataset"),
+            chart_config=widget_data.get("chart_config", {}),
+            query_config=widget_data.get("query_config", {}),
+            grid_x=widget_data.get("grid_x", 0),
+            grid_y=widget_data.get("grid_y", 0),
+            grid_w=widget_data.get("grid_w", 6),
+            grid_h=widget_data.get("grid_h", 4),
+            order=widget_data.get("order", 0),
+        )
+
+    return Response(
+        DashboardPageSerializer(page).data,
+        status=status.HTTP_201_CREATED,
+    )
 
 
 # ---- Widget endpoints ----

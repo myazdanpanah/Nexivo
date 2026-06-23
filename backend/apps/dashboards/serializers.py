@@ -27,17 +27,27 @@ class WidgetSerializer(serializers.ModelSerializer):
 class DashboardPageSerializer(serializers.ModelSerializer):
     widgets = WidgetSerializer(many=True, read_only=True)
     filter_controls = serializers.JSONField(required=False, default=list)
+    allowed_roles = serializers.JSONField(required=False, default=list)
 
     class Meta:
         model = DashboardPage
-        fields = ["id", "name", "order", "layout", "filter_controls", "widgets", "created_at", "updated_at"]
+        fields = ["id", "name", "order", "layout", "filter_controls", "allowed_roles", "widgets", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
 class DashboardPageCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DashboardPage
-        fields = ["name", "order", "layout", "filter_controls"]
+        fields = ["name", "order", "layout", "filter_controls", "allowed_roles"]
+
+
+class DashboardPageExportSerializer(serializers.ModelSerializer):
+    """Serializer for exporting a page with all its widgets as JSON."""
+    widgets = WidgetSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = DashboardPage
+        fields = ["name", "order", "layout", "filter_controls", "allowed_roles", "widgets"]
 
 
 class DashboardSerializer(serializers.ModelSerializer):

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useDashboardStore, type DashboardPageConfig, type DashboardFilterControl } from '../store/dashboardStore'
-import { Plus, GripVertical, Pencil, Check, Copy, Trash2 } from 'lucide-react'
+import { Plus, GripVertical, Pencil, Check, Copy, Trash2, Download, Upload } from 'lucide-react'
 import api from '../api/client'
 
 export default function PageNavBar() {
@@ -94,6 +94,59 @@ export default function PageNavBar() {
     } catch {
       // ignore
     }
+  }
+
+  const handleExportPage = async (pageId: string) => {
+    if (!dashboardId) return
+    try {
+      const res = await api.get(`/dashboards/${dashboardId}/pages/${pageId}/export/`)
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `page-${pageId}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      setShowMenu(null)
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleImportPage = async () => {
+    if (!dashboardId) return
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+      try {
+        const text = await file.text()
+        const data = JSON.parse(text)
+        const res = await api.post(`/dashboards/${dashboardId}/pages/import/`, data)
+        const newPage: DashboardPageConfig = {
+          id: String(res.data.id),
+          name: res.data.name,
+          order: res.data.order,
+          layout: res.data.layout || [],
+          filterControls: (res.data.filter_controls as DashboardFilterControl[]) || [],
+          widgets: ((res.data.widgets || []) as Array<Record<string, unknown>>).map((w) => ({
+            id: String(w.id),
+            title: w.title as string,
+            chartType: w.chart_type as string,
+            datasetId: w.dataset as number | null,
+            chartConfig: (w.chart_config as Record<string, unknown>) || {},
+            queryConfig: (w.query_config as Record<string, unknown>) || {},
+            columnTypes: (w.column_types as Record<string, string>) || {},
+          })),
+        }
+        addPage(newPage)
+      } catch {
+        // ignore
+      }
+    }
+    input.click()
   }
 
   const startRename = (page: DashboardPageConfig) => {
@@ -237,6 +290,13 @@ export default function PageNavBar() {
                     <Copy className="w-3 h-3" />
                     کپی صفحه
                   </button>
+                  <button
+                    onClick={() => handleExportPage(page.id)}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                  >
+                    <Download className="w-3 h-3" />
+                    خروجی JSON
+                  </button>
                   {pages.length > 1 && (
                     <button
                       onClick={() => handleDeletePage(page.id)}
@@ -259,6 +319,15 @@ export default function PageNavBar() {
           title="افزودن صفحه جدید"
         >
           <Plus className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Import page button */}
+        <button
+          onClick={handleImportPage}
+          className="flex items-center gap-1 px-2 py-1.5 text-xs text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+          title="وارد کردن صفحه"
+        >
+          <Upload className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
