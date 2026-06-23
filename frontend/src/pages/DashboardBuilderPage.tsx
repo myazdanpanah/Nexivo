@@ -65,30 +65,46 @@ export default function DashboardBuilderPage() {
         setFilterControls(res.data.filter_controls)
       }
 
-      // Load pages
-      const serverPages: DashboardPageConfig[] = (res.data.pages || []).map((p: Record<string, unknown>) => ({
-        id: String(p.id),
-        name: p.name as string,
-        order: p.order as number,
-        layout: (p.layout as Array<Record<string, unknown>> || []).map((l) => ({
+      // Load pages — build layout from raw server data before mapping widgets
+      const serverPages: DashboardPageConfig[] = (res.data.pages || []).map((p: Record<string, unknown>) => {
+        const rawWidgets = (p.widgets as Array<Record<string, unknown>>) || []
+        let pageLayout = (p.layout as Array<Record<string, unknown>> || []).map((l) => ({
           i: String(l.i),
           x: l.x as number,
           y: l.y as number,
           w: l.w as number,
           h: l.h as number,
-        })),
-        filterControls: (p.filter_controls as DashboardFilterControl[]) || [],
-        allowedRoles: (p.allowed_roles as string[]) || [],
-        widgets: ((p.widgets as Array<Record<string, unknown>>) || []).map((w) => ({
-          id: String(w.id),
-          title: w.title as string,
-          chartType: w.chart_type as string,
-          datasetId: w.dataset as number | null,
-          chartConfig: (w.chart_config as Record<string, unknown>) || {},
-          queryConfig: (w.query_config as Record<string, unknown>) || {},
-          columnTypes: (w.column_types as Record<string, string>) || {},
-        })),
-      }))
+        }))
+
+        // Backward compat: build layout from widget grid positions when layout is empty
+        if (pageLayout.length === 0 && rawWidgets.length > 0) {
+          pageLayout = rawWidgets.map((w) => ({
+            i: String(w.id),
+            x: (w.grid_x as number) ?? 0,
+            y: (w.grid_y as number) ?? 0,
+            w: (w.grid_w as number) ?? 6,
+            h: (w.grid_h as number) ?? 4,
+          }))
+        }
+
+        return {
+          id: String(p.id),
+          name: p.name as string,
+          order: p.order as number,
+          layout: pageLayout,
+          filterControls: (p.filter_controls as DashboardFilterControl[]) || [],
+          allowedRoles: (p.allowed_roles as string[]) || [],
+          widgets: rawWidgets.map((w) => ({
+            id: String(w.id),
+            title: w.title as string,
+            chartType: w.chart_type as string,
+            datasetId: w.dataset as number | null,
+            chartConfig: (w.chart_config as Record<string, unknown>) || {},
+            queryConfig: (w.query_config as Record<string, unknown>) || {},
+            columnTypes: (w.column_types as Record<string, string>) || {},
+          })),
+        }
+      })
 
       if (serverPages.length > 0) {
         setPages(serverPages)

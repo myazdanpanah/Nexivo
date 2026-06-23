@@ -158,15 +158,17 @@ def dashboard_create_from_template(request):
     )
 
     # Create pages and widgets
-    for page_data in tmpl["pages"]:
+    for page_idx, page_data in enumerate(tmpl["pages"]):
         page = DashboardPage.objects.create(
             dashboard=dashboard,
             name=page_data["name"],
-            order=tmpl["pages"].index(page_data),
+            order=page_idx,
         )
 
-        for widget_data in page_data["widgets"]:
-            Widget.objects.create(
+        # Create widgets first, then build layout from their actual IDs
+        layout = []
+        for idx, widget_data in enumerate(page_data["widgets"]):
+            widget = Widget.objects.create(
                 dashboard=dashboard,
                 page=page,
                 title=widget_data["title"],
@@ -175,7 +177,19 @@ def dashboard_create_from_template(request):
                 grid_y=widget_data.get("grid_y", 0),
                 grid_w=widget_data.get("grid_w", 6),
                 grid_h=widget_data.get("grid_h", 4),
+                order=idx,
             )
+            layout.append({
+                "i": str(widget.id),
+                "x": widget.grid_x,
+                "y": widget.grid_y,
+                "w": widget.grid_w,
+                "h": widget.grid_h,
+            })
+
+        # Update page with correct layout referencing actual widget IDs
+        page.layout = layout
+        page.save(update_fields=["layout"])
 
     return Response(
         DashboardSerializer(dashboard).data,
@@ -343,6 +357,14 @@ def page_detail(request, dashboard_pk, page_pk):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     if request.method == "GET":
+        # Enforce per-page access control
+        page_roles = page.allowed_roles or []
+        if page_roles and request.user.role != "ceo" and not request.user.is_staff:
+            if request.user.role not in page_roles:
+                return Response(
+                    {"error": "You do not have access to this page"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         return Response(DashboardPageSerializer(page).data)
 
     elif request.method == "PUT":
@@ -385,8 +407,13 @@ def page_duplicate(request, dashboard_pk, page_pk):
         allowed_roles=source_page.allowed_roles,
     )
 
-    for widget in source_page.widgets.all():
-        Widget.objects.create(
+    # Remap layout IDs from source widgets to new widgets
+    new_layout = []
+    source_widgets = list(source_page.widgets.all())
+    id_map = {}
+
+    for widget in source_widgets:
+        new_widget = Widget.objects.create(
             dashboard=dashboard,
             page=new_page,
             title=widget.title,
@@ -400,6 +427,15 @@ def page_duplicate(request, dashboard_pk, page_pk):
             grid_h=widget.grid_h,
             order=widget.order,
         )
+        id_map[str(widget.id)] = str(new_widget.id)
+
+    for item in source_page.layout:
+        new_item = dict(item)
+        new_item["i"] = id_map.get(str(item.get("i", "")), str(item.get("i", "")))
+        new_layout.append(new_item)
+
+    new_page.layout = new_layout
+    new_page.save(update_fields=["layout"])
 
     return Response(
         DashboardPageSerializer(new_page).data,

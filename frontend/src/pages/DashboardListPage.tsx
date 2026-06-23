@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import api from '../api/client'
+import { useToast } from '../components/Toast'
 import { Plus, BarChart3, Upload, LogOut, ChevronLeft, LayoutTemplate, TrendingUp, DollarSign, Megaphone, Users, ShoppingBag } from 'lucide-react'
 
 interface Dashboard {
@@ -49,6 +50,7 @@ export default function DashboardListPage() {
   const [creatingFromTemplate, setCreatingFromTemplate] = useState<string | null>(null)
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+  const { toast } = useToast()
 
   useEffect(() => {
     fetchDashboards()
@@ -82,9 +84,10 @@ export default function DashboardListPage() {
         description: '',
         allowed_roles: ['ceo', 'finance', 'sales'],
       })
+      toast('داشبورد جدید ساخته شد', 'success')
       navigate(`/dashboards/${res.data.id}`)
     } catch {
-      // ignore
+      toast('خطا در ساخت داشبورد', 'error')
     }
   }
 
@@ -94,10 +97,11 @@ export default function DashboardListPage() {
       const res = await api.post('/dashboards/create-from-template/', {
         template_id: templateId,
       })
+      toast('داشبورد از قالب ساخته شد', 'success')
       setShowTemplates(false)
       navigate(`/dashboards/${res.data.id}`)
     } catch {
-      // ignore
+      toast('خطا در ساخت داشبورد از قالب', 'error')
     } finally {
       setCreatingFromTemplate(null)
     }
