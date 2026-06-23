@@ -16,6 +16,7 @@ export interface DashboardPageConfig {
   layout: GridItem[]
   widgets: WidgetConfig[]
   filterControls?: DashboardFilterControl[]
+  allowedRoles?: string[]
 }
 
 export interface WidgetConfig {

@@ -138,3 +138,12 @@ html[dir="rtl"] .react-resizable-handle:active::after {
 .widget-card:hover {
   transform: translateY(-1px);
 }
+
+/* Toast animation */
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}

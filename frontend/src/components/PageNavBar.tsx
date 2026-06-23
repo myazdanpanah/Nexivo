@@ -1,28 +1,43 @@
 import { useState, useEffect, useRef } from 'react'
 import { useDashboardStore, type DashboardPageConfig, type DashboardFilterControl } from '../store/dashboardStore'
-import { Plus, GripVertical, Pencil, Check, Copy, Trash2, Download, Upload } from 'lucide-react'
+import { useToast } from './Toast'
+import { Plus, GripVertical, Pencil, Check, Copy, Trash2, Download, Upload, Shield } from 'lucide-react'
 import api from '../api/client'
+
+const ROLE_OPTIONS = [
+  { value: 'ceo', label: 'مدیرعامل' },
+  { value: 'finance', label: 'مالی' },
+  { value: 'sales', label: 'فروش' },
+  { value: 'admin', label: 'مدیر سیستم' },
+]
 
 export default function PageNavBar() {
   const { pages, activePageId, setActivePage, addPage, updatePage, removePage, setPages, dashboardId } = useDashboardStore()
+  const { toast } = useToast()
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [showMenu, setShowMenu] = useState<string | null>(null)
+  const [showAccessControl, setShowAccessControl] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const accessRef = useRef<HTMLDivElement>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
-  // Close context menu on outside click
+  // Close context menus on outside click
   useEffect(() => {
-    if (!showMenu) return
+    if (!showMenu && !showAccessControl) return
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      if (menuRef.current && !menuRef.current.contains(target)) {
         setShowMenu(null)
+      }
+      if (accessRef.current && !accessRef.current.contains(target)) {
+        setShowAccessControl(null)
       }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [showMenu])
+  }, [showMenu, showAccessControl])
 
   const handleAddPage = async () => {
     if (!dashboardId) return
@@ -39,8 +54,9 @@ export default function PageNavBar() {
         layout: res.data.layout || [],
         widgets: [],
       })
+      toast('صفحه جدید اضافه شد', 'success')
     } catch {
-      // ignore
+      toast('خطا در افزودن صفحه', 'error')
     }
   }
 
@@ -52,20 +68,28 @@ export default function PageNavBar() {
       })
       updatePage(pageId, { name: renameValue.trim() })
       setRenamingId(null)
+      toast('نام صفحه تغییر کرد', 'success')
     } catch {
-      // ignore
+      toast('خطا در تغییر نام', 'error')
     }
   }
 
   const handleDeletePage = async (pageId: string) => {
     if (!dashboardId) return
-    if (pages.length <= 1) return
+    if (pages.length <= 1) {
+      toast('امکان حذف آخرین صفحه وجود ندارد', 'error')
+      return
+    }
+    if (!window.confirm('آیا از حذف این صفحه و تمام نمودارهای آن اطمینان دارید؟ این عمل غیرقابل بازگشت است.')) {
+      return
+    }
     try {
       await api.delete(`/dashboards/${dashboardId}/pages/${pageId}/`)
       removePage(pageId)
       setShowMenu(null)
+      toast('صفحه حذف شد', 'success')
     } catch {
-      // ignore
+      toast('خطا در حذف صفحه', 'error')
     }
   }
 
@@ -91,8 +115,9 @@ export default function PageNavBar() {
       }
       addPage(newPage)
       setShowMenu(null)
+      toast('صفحه کپی شد', 'success')
     } catch {
-      // ignore
+      toast('خطا در کپی صفحه', 'error')
     }
   }
 
@@ -108,8 +133,9 @@ export default function PageNavBar() {
       a.click()
       URL.revokeObjectURL(url)
       setShowMenu(null)
+      toast('خروجی JSON دانلود شد', 'success')
     } catch {
-      // ignore
+      toast('خطا در خروجی گرفتن', 'error')
     }
   }
 
@@ -142,11 +168,37 @@ export default function PageNavBar() {
           })),
         }
         addPage(newPage)
+        toast('صفحه وارد شد', 'success')
       } catch {
-        // ignore
+        toast('خطا در وارد کردن صفحه', 'error')
       }
     }
     input.click()
+  }
+
+  const handleAccessControlToggle = async (pageId: string, role: string, checked: boolean) => {
+    if (!dashboardId) return
+    const page = pages.find((p) => p.id === pageId)
+    if (!page) return
+    const currentRoles = page.allowedRoles || []
+    const allRoles = ROLE_OPTIONS.map((r) => r.value)
+    let newRoles: string[]
+    if (checked) {
+      newRoles = [...currentRoles, role]
+      // If all roles are now checked, use empty array (meaning "all allowed")
+      if (newRoles.length === allRoles.length) newRoles = []
+    } else {
+      newRoles = currentRoles.filter((r) => r !== role)
+    }
+    try {
+      await api.put(`/dashboards/${dashboardId}/pages/${pageId}/`, {
+        allowed_roles: newRoles,
+      })
+      updatePage(pageId, { allowedRoles: newRoles } as Partial<DashboardPageConfig>)
+      toast('دسترسی صفحه به‌روز شد', 'success')
+    } catch {
+      toast('خطا در به‌روزرسانی دسترسی', 'error')
+    }
   }
 
   const startRename = (page: DashboardPageConfig) => {
@@ -180,21 +232,19 @@ export default function PageNavBar() {
       return
     }
 
-    // Reorder pages
     const newPages = [...pages]
     const [moved] = newPages.splice(dragIndex, 1)
     newPages.splice(dropIndex, 0, moved)
 
-    // Update orders
     const reordered = newPages.map((p, i) => ({ ...p, order: i }))
     setPages(reordered)
     setDragIndex(null)
 
-    // Persist to backend
     if (dashboardId) {
       api.put(`/dashboards/${dashboardId}/pages/reorder/`, {
         page_ids: reordered.map((p) => parseInt(p.id)),
       }).catch(() => {})
+      toast('ترتیب صفحات ذخیره شد', 'success')
     }
   }
 
@@ -210,6 +260,7 @@ export default function PageNavBar() {
       <div className="flex items-center gap-1 overflow-x-auto py-1 scrollbar-thin">
         {pages.map((page, index) => {
           const isActive = page.id === activePageId
+          const pageRoles = (page as unknown as Record<string, unknown>).allowedRoles as string[] | undefined
           return (
             <div
               key={page.id}
@@ -259,6 +310,9 @@ export default function PageNavBar() {
                     />
                   )}
                   {page.name}
+                  {pageRoles && pageRoles.length > 0 && (
+                    <Shield className="w-3 h-3 text-amber-500" />
+                  )}
                   {isActive && (
                     <button
                       onClick={(e) => {
@@ -297,6 +351,16 @@ export default function PageNavBar() {
                     <Download className="w-3 h-3" />
                     خروجی JSON
                   </button>
+                  <button
+                    onClick={() => {
+                      setShowMenu(null)
+                      setShowAccessControl(showAccessControl === page.id ? null : page.id)
+                    }}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                  >
+                    <Shield className="w-3 h-3" />
+                    کنترل دسترسی
+                  </button>
                   {pages.length > 1 && (
                     <button
                       onClick={() => handleDeletePage(page.id)}
@@ -306,6 +370,27 @@ export default function PageNavBar() {
                       حذف صفحه
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* Access control panel */}
+              {showAccessControl === page.id && (
+                <div ref={accessRef} className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-50 min-w-[180px]">
+                  <div className="text-xs font-medium text-gray-700 mb-2">نقش‌های مجاز:</div>
+                  <div className="space-y-1">
+                    {ROLE_OPTIONS.map((role) => (
+                      <label key={role.value} className="flex items-center gap-2 text-xs text-gray-600 hover:bg-gray-50 rounded px-1 py-0.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!pageRoles || pageRoles.length === 0 || pageRoles.includes(role.value)}
+                          onChange={(e) => handleAccessControlToggle(page.id, role.value, e.target.checked)}
+                          className="w-3 h-3 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                        />
+                        {role.label}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-2">بدون انتخاب = همه نقش‌ها</p>
                 </div>
               )}
             </div>

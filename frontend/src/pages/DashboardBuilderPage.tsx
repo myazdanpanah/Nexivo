@@ -7,6 +7,7 @@ import ChartWidget from '../components/ChartWidget'
 import WidgetConfigPanel from '../components/WidgetConfigPanel'
 import DashboardFilterBar from '../components/DashboardFilterBar'
 import PageNavBar from '../components/PageNavBar'
+import { useToast } from '../components/Toast'
 import { Plus, ArrowRight, Settings, Trash2 } from 'lucide-react'
 
 import 'react-grid-layout/css/styles.css'
@@ -33,6 +34,7 @@ export default function DashboardBuilderPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePageId])
+  const { toast } = useToast()
   const [showConfig, setShowConfig] = useState(false)
   const [editingWidget, setEditingWidget] = useState<string | null>(null)
   const [mobileSettingsWidget, setMobileSettingsWidget] = useState<string | null>(null)
@@ -76,6 +78,7 @@ export default function DashboardBuilderPage() {
           h: l.h as number,
         })),
         filterControls: (p.filter_controls as DashboardFilterControl[]) || [],
+        allowedRoles: (p.allowed_roles as string[]) || [],
         widgets: ((p.widgets as Array<Record<string, unknown>>) || []).map((w) => ({
           id: String(w.id),
           title: w.title as string,
@@ -178,13 +181,15 @@ export default function DashboardBuilderPage() {
 
   const deleteWidget = async (widgetId: string) => {
     if (!id) return
+    if (!window.confirm('آیا از حذف این نمودار اطمینان دارید؟')) return
     try {
       await api.delete(`/dashboards/${id}/widgets/${widgetId}/`)
       removeWidget(widgetId)
       setShowConfig(false)
       setEditingWidget(null)
+      toast('نمودار حذف شد', 'success')
     } catch {
-      // ignore
+      toast('خطا در حذف نمودار', 'error')
     }
   }
 
