@@ -1,0 +1,532 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useDashboardStore, controlFiltersToQuery, type DashboardFilterControl } from '../store/dashboardStore'
+import { X, Plus, Filter, ChevronDown, ChevronUp, Calendar, Search, CheckSquare, Sliders, Trash2 } from 'lucide-react'
+import api from '../api/client'
+
+interface Dataset {
+  id: number
+  name: string
+  column_names: string[]
+  column_types: Record<string, string>
+}
+
+const CONTROL_TYPES = [
+  { value: 'dropdown', label: 'لیست کشویی', icon: ChevronDown },
+  { value: 'date_range', label: 'محدوده تاریخ', icon: Calendar },
+  { value: 'text_search', label: 'جستجوی متن', icon: Search },
+  { value: 'checkbox', label: 'چک‌باکس', icon: CheckSquare },
+  { value: 'slider', label: 'اسلایدر', icon: Sliders },
+] as const
+
+function generateId(): string {
+  return `fc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+export default function DashboardFilterBar() {
+  const {
+    filterControls,
+    setFilterControls,
+    addFilterControl,
+    updateFilterControl,
+    removeFilterControl,
+    clearFilters,
+    filters,
+    removeFilter,
+    widgets,
+  } = useDashboardStore()
+
+  const dashboardId = useDashboardStore((s) => s.dashboardId)
+  const activePageId = useDashboardStore((s) => s.activePageId)
+  const updatePage = useDashboardStore((s) => s.updatePage)
+  const hasLoadedRef = useRef(false)
+  const lastPersistedRef = useRef('')
+  const [expanded, setExpanded] = useState(true)
+  const [addingControl, setAddingControl] = useState(false)
+  const [datasets, setDatasets] = useState<Dataset[]>([])
+  const [newControlCol, setNewControlCol] = useState('')
+  const [newControlType, setNewControlType] = useState<DashboardFilterControl['type']>('dropdown')
+  const [newControlLabel, setNewControlLabel] = useState('')
+  const [newControlDatasetId, setNewControlDatasetId] = useState<number | null>(null)
+
+  // Get unique dataset IDs from all widgets
+  const datasetIds = [...new Set(widgets.map((w) => w.datasetId).filter(Boolean))] as number[]
+
+  useEffect(() => {
+    fetchDatasets()
+  }, [])
+
+  // Persist filter controls to backend on user edits (skip initial mount and page switches)
+  useEffect(() => {
+    if (!hasLoadedRef.current) {
+      hasLoadedRef.current = true
+      return
+    }
+    const json = JSON.stringify(filterControls)
+    if (json === lastPersistedRef.current) return // Skip redundant PUTs (e.g. from page switches)
+    lastPersistedRef.current = json
+    if (activePageId) {
+      updatePage(activePageId, { filterControls: [...filterControls] })
+    }
+    if (dashboardId && activePageId) {
+      api.put(`/dashboards/${dashboardId}/pages/${activePageId}/`, {
+        filter_controls: filterControls,
+      }).catch(() => {})
+    }
+  }, [filterControls, dashboardId, activePageId, updatePage])
+
+  const fetchDatasets = async () => {
+    try {
+      const res = await api.get('/datasets/')
+      setDatasets(res.data as Dataset[])
+    } catch {
+      // ignore
+    }
+  }
+
+  // Fetch unique values for dropdown/checkbox controls
+  const fetchUniqueValues = useCallback(async (datasetId: number, col: string): Promise<string[]> => {
+    try {
+      const res = await api.post(`/datasets/${datasetId}/query/`, {
+        columns: [col],
+        metrics: {},
+      })
+      const rows = res.data.data as Record<string, unknown>[]
+      const uniqueVals = [...new Set(rows.map((r) => String(r[col] ?? '')))]
+      return uniqueVals.sort()
+    } catch {
+      return []
+    }
+  }, [])
+
+  // Fetch min/max for slider controls
+  const fetchNumericRange = useCallback(async (datasetId: number, col: string): Promise<{ min: number; max: number }> => {
+    try {
+      const res = await api.post(`/datasets/${datasetId}/query/`, {
+        columns: [col],
+        metrics: { [col]: 'MIN' },
+      })
+      const min = Number(res.data.data[0]?.[col]) || 0
+      const resMax = await api.post(`/datasets/${datasetId}/query/`, {
+        columns: [col],
+        metrics: { [col]: 'MAX' },
+      })
+      const max = Number(resMax.data.data[0]?.[col]) || 100
+      return { min, max }
+    } catch {
+      return { min: 0, max: 100 }
+    }
+  }, [])
+
+  const handleAddControl = async () => {
+    if (!newControlCol || !newControlDatasetId) return
+
+    const ds = datasets.find((d) => d.id === newControlDatasetId)
+    const colType = (ds?.column_types[newControlCol] || '').toUpperCase()
+    const isDate = colType.includes('TIMESTAMP') || colType.includes('DATE') || colType.includes('TIME')
+    const isNumeric = ['BIGINT', 'INTEGER', 'SMALLINT', 'DOUBLE PRECISION', 'REAL', 'NUMERIC', 'DECIMAL', 'FLOAT', 'INT64', 'FLOAT64'].includes(colType)
+
+    // Auto-select type based on column type
+    let autoType = newControlType
+    if (isDate) autoType = 'date_range'
+    else if (isNumeric) autoType = 'slider'
+
+    const control: DashboardFilterControl = {
+      id: generateId(),
+      col: newControlCol,
+      type: autoType,
+      label: newControlLabel || newControlCol,
+      datasetId: newControlDatasetId,
+      value: null,
+    }
+
+    // Pre-fetch options for dropdown/checkbox
+    if (autoType === 'dropdown' || autoType === 'checkbox') {
+      const options = await fetchUniqueValues(newControlDatasetId, newControlCol)
+      control.options = options
+      if (autoType === 'checkbox') {
+        control.multiSelect = true
+      }
+    }
+
+    // Pre-fetch range for slider
+    if (autoType === 'slider') {
+      const range = await fetchNumericRange(newControlDatasetId, newControlCol)
+      control.min = range.min
+      control.max = range.max
+      control.step = Math.max(1, Math.round((range.max - range.min) / 100))
+      control.value = [range.min, range.max]
+    }
+
+    addFilterControl(control)
+    setAddingControl(false)
+    setNewControlCol('')
+    setNewControlType('dropdown')
+    setNewControlLabel('')
+    setNewControlDatasetId(null)
+  }
+
+  const handleControlValueChange = (controlId: string, value: string | number | string[] | [number, number] | null) => {
+    updateFilterControl(controlId, { value: value as DashboardFilterControl['value'] })
+  }
+
+  // Compute active control filters using shared utility
+  const activeControlFilters = controlFiltersToQuery(filterControls)
+
+  // Find which dataset to show columns for
+  const selectedDs = newControlDatasetId ? datasets.find((d) => d.id === newControlDatasetId) : null
+  const dsForNewControl = selectedDs || (datasets.find((d) => datasetIds.includes(d.id)))
+
+  const hasActiveFilters = activeControlFilters.length > 0 || filters.length > 0
+
+  return (
+    <div className="bg-white border-b border-gray-200" dir="rtl">
+      {/* Filter bar header */}
+      <div className="flex items-center justify-between px-6 py-2">
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-gray-400" />
+          <span className="text-sm font-medium text-gray-600">فیلترها</span>
+          {hasActiveFilters && (
+            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] rounded-full font-medium">
+              {activeControlFilters.length + filters.length} فعال
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {(hasActiveFilters) && (
+            <button
+              onClick={() => {
+                // Clear all control values
+                setFilterControls(filterControls.map((c) => ({ ...c, value: null })))
+                clearFilters()
+              }}
+              className="text-xs text-gray-500 hover:text-red-500 transition"
+            >
+              پاک کردن همه
+            </button>
+          )}
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="p-1 text-gray-400 hover:text-gray-600 transition"
+          >
+            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Active filter chips */}
+      {hasActiveFilters && !expanded && (
+        <div className="flex flex-wrap gap-1.5 px-6 pb-2">
+          {filterControls
+            .filter((c) => c.value !== null && c.value !== '' && c.value !== undefined)
+            .map((c) => (
+              <span
+                key={c.id}
+                className="flex items-center gap-1 px-2 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs border border-indigo-200"
+              >
+                <span className="font-medium">{c.label}:</span>
+                <span>
+                  {c.type === 'slider' && Array.isArray(c.value)
+                    ? `${c.value[0]} – ${c.value[1]}`
+                    : c.type === 'checkbox' && Array.isArray(c.value)
+                    ? c.value.join(', ')
+                    : String(c.value)}
+                </span>
+                <button
+                  onClick={() => handleControlValueChange(c.id, null)}
+                  className="hover:text-indigo-900"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          {filters.map((f, idx) => (
+            <span
+              key={idx}
+              className="flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 rounded-full text-xs border border-amber-200"
+            >
+              <span className="font-medium">{f.col}:</span>
+              <span>{String(f.val)}</span>
+              <button
+                onClick={() => removeFilter(f.col)}
+                className="hover:text-amber-900"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Expanded controls */}
+      {expanded && (
+        <div className="px-6 pb-3">
+          <div className="flex flex-wrap gap-3 items-end">
+            {filterControls.map((control) => (
+                <div key={control.id} className="relative">
+                  <FilterControlWidget
+                    control={control}
+                    onChange={(value) => handleControlValueChange(control.id, value)}
+                  />
+                  <button
+                    onClick={() => removeFilterControl(control.id)}
+                    className="absolute -top-1 -left-1 w-4 h-4 bg-gray-200 hover:bg-red-400 hover:text-white rounded-full flex items-center justify-center text-[8px] text-gray-500 transition z-10"
+                    title="حذف فیلتر"
+                  >
+                    <Trash2 className="w-2 h-2" />
+                  </button>
+                </div>
+            ))}
+
+            {/* Add control button */}
+            {!addingControl ? (
+              <button
+                onClick={() => setAddingControl(true)}
+                className="flex items-center gap-1.5 px-3 py-2 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-indigo-400 hover:text-indigo-600 transition"
+              >
+                <Plus className="w-4 h-4" />
+                افزودن فیلتر
+              </button>
+            ) : (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2 min-w-[280px]">
+                <div className="text-xs font-medium text-gray-700">فیلتر جدید</div>
+
+                {/* Dataset selector */}
+                <select
+                  value={newControlDatasetId || ''}
+                  onChange={(e) => setNewControlDatasetId(e.target.value ? parseInt(e.target.value) : null)}
+                  className="w-full px-2 py-1.5 rounded-lg border border-gray-300 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="">مجموعه داده...</option>
+                  {datasets.filter((d) => datasetIds.includes(d.id)).map((ds) => (
+                    <option key={ds.id} value={ds.id}>{ds.name}</option>
+                  ))}
+                </select>
+
+                {/* Column selector */}
+                {dsForNewControl && (
+                  <select
+                    value={newControlCol}
+                    onChange={(e) => setNewControlCol(e.target.value)}
+                    className="w-full px-2 py-1.5 rounded-lg border border-gray-300 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                  >
+                    <option value="">ستون...</option>
+                    {dsForNewControl.column_names.map((col) => (
+                      <option key={col} value={col}>{col}</option>
+                    ))}
+                  </select>
+                )}
+
+                {/* Type selector */}
+                <select
+                  value={newControlType}
+                  onChange={(e) => setNewControlType(e.target.value as DashboardFilterControl['type'])}
+                  className="w-full px-2 py-1.5 rounded-lg border border-gray-300 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                >
+                  {CONTROL_TYPES.map((ct) => (
+                    <option key={ct.value} value={ct.value}>{ct.label}</option>
+                  ))}
+                </select>
+
+                {/* Label */}
+                <input
+                  type="text"
+                  value={newControlLabel}
+                  onChange={(e) => setNewControlLabel(e.target.value)}
+                  placeholder="برچسب (اختیاری)"
+                  className="w-full px-2 py-1.5 rounded-lg border border-gray-300 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                />
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleAddControl}
+                    disabled={!newControlCol || !newControlDatasetId}
+                    className="flex-1 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
+                  >
+                    افزودن
+                  </button>
+                  <button
+                    onClick={() => setAddingControl(false)}
+                    className="px-3 py-1.5 text-gray-500 text-xs rounded-lg hover:bg-gray-100 transition"
+                  >
+                    انصراف
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Individual filter control widget */
+function FilterControlWidget({
+  control,
+  onChange,
+}: {
+  control: DashboardFilterControl
+  onChange: (value: string | number | string[] | [number, number] | null) => void
+}) {
+  if (control.type === 'dropdown') {
+    return (
+      <div className="min-w-[160px]">
+        <label className="block text-[10px] text-gray-500 mb-0.5 font-medium">{control.label}</label>
+        <div className="relative">
+          <select
+            value={String(control.value || '')}
+            onChange={(e) => onChange(e.target.value || null)}
+            className="w-full px-2 py-1.5 pr-6 rounded-lg border border-gray-300 text-xs bg-white focus:ring-1 focus:ring-indigo-500 outline-none appearance-none"
+          >
+            <option value="">همه</option>
+            {(control.options || []).map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+          <ChevronDown className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+          {control.value && (
+            <button
+              onClick={() => onChange(null)}
+              className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (control.type === 'date_range') {
+    const val = control.value as [number, number] | null
+    const startStr = val ? new Date(val[0]).toISOString().split('T')[0] : ''
+    const endStr = val ? new Date(val[1]).toISOString().split('T')[0] : ''
+    return (
+      <div className="min-w-[240px]">
+        <label className="block text-[10px] text-gray-500 mb-0.5 font-medium">{control.label}</label>
+        <div className="flex items-center gap-1">
+          <input
+            type="date"
+            value={startStr}
+            onChange={(e) => {
+              const start = e.target.value ? new Date(e.target.value).getTime() : null
+              if (start !== null && val) onChange([start, val[1]])
+              else if (start !== null) onChange([start, Date.now()])
+            }}
+            className="flex-1 px-2 py-1.5 rounded-lg border border-gray-300 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+          />
+          <span className="text-gray-400 text-xs">تا</span>
+          <input
+            type="date"
+            value={endStr}
+            onChange={(e) => {
+              const end = e.target.value ? new Date(e.target.value).getTime() + 86400000 : null
+              if (end !== null && val) onChange([val[0], end])
+              else if (end !== null) onChange([0, end])
+            }}
+            className="flex-1 px-2 py-1.5 rounded-lg border border-gray-300 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (control.type === 'text_search') {
+    return (
+      <div className="min-w-[160px]">
+        <label className="block text-[10px] text-gray-500 mb-0.5 font-medium">{control.label}</label>
+        <div className="relative">
+          <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            value={String(control.value || '')}
+            onChange={(e) => onChange(e.target.value || null)}
+            placeholder="جستجو..."
+            className="w-full pr-7 pl-6 py-1.5 rounded-lg border border-gray-300 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+          />
+          {control.value && (
+            <button
+              onClick={() => onChange(null)}
+              className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (control.type === 'checkbox') {
+    const selected = (control.value as string[] | null) || []
+    return (
+      <div className="min-w-[160px]">
+        <label className="block text-[10px] text-gray-500 mb-0.5 font-medium">{control.label}</label>
+        <div className="max-h-32 overflow-y-auto border border-gray-300 rounded-lg p-1.5 space-y-0.5">
+          {(control.options || []).map((opt) => (
+            <label key={opt} className="flex items-center gap-1.5 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selected.includes(opt)}
+                onChange={(e) => {
+                  const next: string[] = e.target.checked
+                    ? [...selected, opt]
+                    : selected.filter((s) => s !== opt)
+                  onChange(next.length > 0 ? (next as string[]) : null)
+                }}
+                className="w-3 h-3 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+              />
+              <span className="text-xs text-gray-700 truncate">{opt}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (control.type === 'slider') {
+    const val = control.value as [number, number] | null
+    const min = control.min ?? 0
+    const max = control.max ?? 100
+    const currentMin = val ? val[0] : min
+    const currentMax = val ? val[1] : max
+    return (
+      <div className="min-w-[200px]">
+        <label className="block text-[10px] text-gray-500 mb-0.5 font-medium">
+          {control.label}: {currentMin} – {currentMax}
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            value={currentMin}
+            onChange={(e) => {
+              const v = Number(e.target.value)
+              onChange([v, currentMax])
+            }}
+            className="w-16 px-1.5 py-1 rounded border border-gray-300 text-xs text-center focus:ring-1 focus:ring-indigo-500 outline-none"
+          />
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={control.step || 1}
+            value={currentMax}
+            onChange={(e) => onChange([currentMin, Number(e.target.value)])}
+            className="flex-1 accent-indigo-600"
+          />
+          <input
+            type="number"
+            value={currentMax}
+            onChange={(e) => {
+              const v = Number(e.target.value)
+              onChange([currentMin, v])
+            }}
+            className="w-16 px-1.5 py-1 rounded border border-gray-300 text-xs text-center focus:ring-1 focus:ring-indigo-500 outline-none"
+          />
+        </div>
+      </div>
+    )
+  }
+
+  return null
+}

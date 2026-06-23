@@ -108,6 +108,106 @@ export function getChartDefaults(chartType: string): EChartsOption {
         ],
       }
 
+    case 'heatmap':
+      return {
+        ...base,
+        tooltip: {
+          position: 'top',
+        },
+        grid: {
+          top: 40,
+          right: 80,
+          bottom: 60,
+          left: 80,
+          containLabel: true,
+        },
+        xAxis: {
+          type: 'category',
+          data: [],
+          splitArea: { show: true },
+        },
+        yAxis: {
+          type: 'category',
+          data: [],
+          splitArea: { show: true },
+        },
+        visualMap: {
+          min: 0,
+          max: 100,
+          calculable: true,
+          orient: 'vertical' as const,
+          right: 0,
+          top: 'center',
+        },
+        series: [],
+      }
+
+    case 'treemap':
+      return {
+        ...base,
+        tooltip: {
+          formatter: '{b}: {c}',
+        },
+        series: [],
+      }
+
+    case 'sankey':
+      return {
+        ...base,
+        tooltip: {
+          trigger: 'item' as const,
+        },
+        series: [],
+      }
+
+    case 'funnel':
+      return {
+        ...base,
+        tooltip: {
+          trigger: 'item' as const,
+          formatter: '{b}: {c}',
+        },
+        series: [],
+      }
+
+    case 'radar':
+      return {
+        ...base,
+        tooltip: {},
+        radar: {
+          indicator: [],
+        },
+        series: [],
+      }
+
+    case 'graph':
+      return {
+        ...base,
+        tooltip: {},
+        series: [],
+      }
+
+    case 'map':
+      return {
+        ...base,
+        tooltip: {
+          trigger: 'item' as const,
+        },
+        visualMap: {
+          min: 0,
+          max: 100,
+          calculable: true,
+          inRange: {
+            color: ['#e0f3f8', '#abd9e9', '#74add1', '#4575b4', '#313695'],
+          },
+          text: ['بالا', 'پایین'],
+          textStyle: {
+            fontFamily: "'Vazirmatn', Tahoma, Arial, sans-serif",
+          },
+        },
+        series: [],
+      }
+
     default:
       return base
   }

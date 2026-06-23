@@ -40,25 +40,56 @@ body {
   transition-property: left, top, width, height;
 }
 
+/* Let RGL control dimensions via inline styles — do NOT override with !important */
+.react-grid-item > div {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 .react-grid-item.react-draggable-dragging {
-  transition: none;
+  transition: none !important;
   z-index: 100;
   will-change: transform;
+  opacity: 0.92;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
 }
 
 .react-grid-placeholder {
-  background-color: var(--primary-200, #bfdbfe);
-  opacity: 0.3;
-  border-radius: 0.5rem;
+  background-color: #c7d2fe;
+  opacity: 0.35;
+  border-radius: 1rem;
+  border: 2px dashed #6366f1;
 }
 
+/* Resize handle — bigger touch target for mobile */
 .react-resizable-handle {
   position: absolute;
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   bottom: 0;
   right: 0;
   cursor: se-resize;
+  z-index: 10;
+  touch-action: none;
+}
+
+.react-resizable-handle::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 12px;
+  height: 12px;
+  border-right: 3px solid rgba(99, 102, 241, 0.4);
+  border-bottom: 3px solid rgba(99, 102, 241, 0.4);
+  border-radius: 0 0 4px 0;
+  transition: border-color 0.15s;
+}
+
+.react-resizable-handle:hover::after,
+.react-resizable-handle:active::after {
+  border-color: rgba(99, 102, 241, 0.9);
 }
 
 html[dir="rtl"] .react-resizable-handle {
@@ -67,20 +98,43 @@ html[dir="rtl"] .react-resizable-handle {
   cursor: sw-resize;
 }
 
-.react-resizable-handle::after {
-  content: "";
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid rgba(0, 0, 0, 0.3);
-  border-bottom: 2px solid rgba(0, 0, 0, 0.3);
-}
-
 html[dir="rtl"] .react-resizable-handle::after {
   right: auto;
   left: 4px;
   border-right: none;
-  border-left: 2px solid rgba(0, 0, 0, 0.3);
+  border-left: 3px solid rgba(99, 102, 241, 0.4);
+  border-radius: 0 0 0 4px;
+}
+
+html[dir="rtl"] .react-resizable-handle:hover::after,
+html[dir="rtl"] .react-resizable-handle:active::after {
+  border-left-color: rgba(99, 102, 241, 0.9);
+}
+
+/* Drag handle — works on both mobile and desktop */
+.drag-handle {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Mobile touch improvements */
+@media (max-width: 767px) {
+  .react-grid-item.react-draggable-dragging {
+    transform: scale(1.02);
+  }
+}
+
+/* Widget card transitions */
+.widget-card {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.widget-card:hover {
+  transform: translateY(-1px);
 }

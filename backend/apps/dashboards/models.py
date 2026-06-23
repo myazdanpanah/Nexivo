@@ -4,8 +4,8 @@ from django.conf import settings
 
 class Dashboard(models.Model):
     """
-    A dashboard is a collection of widgets (charts) arranged in a grid layout.
-    The layout is stored as JSON compatible with react-grid-layout.
+    A dashboard is a collection of pages, each containing widgets (charts)
+    arranged in a grid layout.
     """
 
     name = models.CharField(max_length=255)
@@ -27,6 +27,13 @@ class Dashboard(models.Model):
     )
     is_published = models.BooleanField(default=False)
 
+    # Dashboard-level filter controls (Looker Studio-style, persisted as JSON)
+    filter_controls = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Persisted dashboard-level filter controls',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -35,6 +42,35 @@ class Dashboard(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class DashboardPage(models.Model):
+    """
+    A page within a dashboard. Each page has its own layout and widgets.
+    """
+
+    dashboard = models.ForeignKey(Dashboard, on_delete=models.CASCADE, related_name="pages")
+    name = models.CharField(max_length=255, default="صفحه ۱")
+    order = models.IntegerField(default=0)
+
+    # Grid layout for this page
+    layout = models.JSONField(default=list, blank=True)
+
+    # Page-level filter controls (Looker Studio-style, persisted as JSON)
+    filter_controls = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Persisted page-level filter controls',
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.dashboard.name})"
 
 
 class Widget(models.Model):
@@ -59,6 +95,14 @@ class Widget(models.Model):
     ]
 
     dashboard = models.ForeignKey(Dashboard, on_delete=models.CASCADE, related_name="widgets")
+    page = models.ForeignKey(
+        DashboardPage,
+        on_delete=models.CASCADE,
+        related_name="widgets",
+        null=True,
+        blank=True,
+        help_text='Page this widget belongs to (null = first page for backward compat)',
+    )
     title = models.CharField(max_length=255, default="Untitled Widget")
     chart_type = models.CharField(max_length=20, choices=CHART_TYPES, default="bar")
 
