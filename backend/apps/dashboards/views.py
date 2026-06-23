@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import status, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -139,14 +141,19 @@ def dashboard_templates(request):
     return Response(templates)
 
 
+logger = logging.getLogger(__name__)
+
+
 @api_view(["POST"])
 def dashboard_create_from_template(request):
     """Create a dashboard from a template."""
     template_id = request.data.get("template_id")
     if template_id not in DASHBOARD_TEMPLATES:
+        logger.warning("Invalid template_id=%s from user=%s", template_id, request.user)
         return Response({"error": "Invalid template"}, status=status.HTTP_400_BAD_REQUEST)
 
     tmpl = DASHBOARD_TEMPLATES[template_id]
+    logger.info("Creating dashboard from template=%s for user=%s", template_id, request.user)
 
     # Create dashboard
     dashboard = Dashboard.objects.create(
@@ -402,7 +409,6 @@ def page_duplicate(request, dashboard_pk, page_pk):
         dashboard=dashboard,
         name=f"{source_page.name} (کپی)",
         order=dashboard.pages.count(),
-        layout=source_page.layout,
         filter_controls=source_page.filter_controls,
         allowed_roles=source_page.allowed_roles,
     )

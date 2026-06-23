@@ -92,6 +92,9 @@ export default function DashboardListPage() {
   }
 
   const createFromTemplate = async (templateId: string) => {
+    const tmpl = templates.find((t) => t.id === templateId)
+    const name = tmpl?.name || templateId
+    if (!window.confirm(`آیا از ساخت داشبورد «${name}» از قالب اطمینان دارید؟`)) return
     setCreatingFromTemplate(templateId)
     try {
       const res = await api.post('/dashboards/create-from-template/', {
