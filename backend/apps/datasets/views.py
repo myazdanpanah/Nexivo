@@ -229,17 +229,24 @@ def dataset_query(request, pk):
     # Enforce row-level data_filters from dashboard assignments
     # The frontend sends dashboardId in the request; we look up any active
     # assignments for this user on that dashboard and apply their data_filters.
+    # Security: validate that the dataset is actually used by a widget in that dashboard
+    # to prevent a user from applying arbitrary dashboard filters to unrelated datasets.
     dashboard_id = request.data.get("dashboardId")
     if dashboard_id:
-        assignments = DashboardAssignment.objects.filter(
-            dashboard_id=dashboard_id,
-            assigned_to=request.user,
-            is_active=True,
-        )
-        for assignment in assignments:
-            for f in (assignment.data_filters or []):
-                if f.get("col") in valid_columns:
-                    additional_filters.append(f)
+        from apps.dashboards.models import Widget as DashboardWidget
+        has_widget = DashboardWidget.objects.filter(
+            dashboard_id=dashboard_id, dataset_id=pk
+        ).exists()
+        if has_widget:
+            assignments = DashboardAssignment.objects.filter(
+                dashboard_id=dashboard_id,
+                assigned_to=request.user,
+                is_active=True,
+            )
+            for assignment in assignments:
+                for f in (assignment.data_filters or []):
+                    if f.get("col") in valid_columns:
+                        additional_filters.append(f)
 
     # Validate filter column names against dataset schema
     for f in additional_filters:

@@ -213,10 +213,8 @@ def dashboard_create_from_template(request):
 def dashboard_list(request):
     """List dashboards or create a new one."""
     if request.method == "GET":
-        if request.user.role == "ceo" or request.user.is_staff:
+        if request.user.role in ("ceo", "admin") or request.user.is_staff:
             # CEO/admin sees all published dashboards
-            dashboards = Dashboard.objects.filter(is_published=True)
-        elif request.user.role in ("admin",):
             dashboards = Dashboard.objects.filter(is_published=True)
         else:
             # Non-admin: role-based + explicitly assigned dashboards
@@ -229,9 +227,8 @@ def dashboard_list(request):
             assigned_dashboards = Dashboard.objects.filter(
                 id__in=assigned_ids, is_published=True
             )
-            from django.db.models import Q
             dashboards = Dashboard.objects.filter(
-                Q(id__in=role_dashboards) | Q(id__in=assigned_dashboards)
+                models.Q(id__in=role_dashboards) | models.Q(id__in=assigned_dashboards)
             ).distinct()
 
         serializer = DashboardSerializer(dashboards, many=True)
@@ -946,6 +943,14 @@ def my_assigned_dashboards(request):
             assignment.assigned_by.username if assignment.assigned_by else None
         )
         entry["assignment_notes"] = assignment.notes
+
+        # Filter pages based on visible_pages restriction
+        if assignment.visible_pages:
+            entry["pages"] = [
+                p for p in entry.get("pages", [])
+                if p["id"] in assignment.visible_pages
+            ]
+
         result.append(entry)
 
     return Response(result)
