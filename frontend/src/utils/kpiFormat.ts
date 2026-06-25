@@ -21,14 +21,8 @@ export const DEFAULT_KPI_FORMAT: KpiFormat = {
 
 export function formatKpiValue(raw: number, fmt?: KpiFormat): string {
   if (!fmt || fmt.type === 'auto') {
-    // Compact notation
-    const compact =
-      raw >= 1_000_000
-        ? `${(raw / 1_000_000).toFixed(1)}M`
-        : raw >= 1_000
-          ? `${(raw / 1_000).toFixed(1)}K`
-          : raw.toLocaleString()
-    return compact
+    // Full number with locale formatting (no M/B/K abbreviations)
+    return raw.toLocaleString()
   }
 
   const dec = fmt.decimals ?? 0

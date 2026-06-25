@@ -330,19 +330,17 @@ export default function PageNavBar() {
                   {pageRoles && pageRoles.length > 0 && (
                     <Shield className="w-3 h-3 text-amber-500" />
                   )}
-                  {isActive && (
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setShowMenu(showMenu === page.id ? null : page.id)
-                      }}
-                      className="p-0.5 text-gray-400 hover:text-gray-600 rounded cursor-pointer"
-                    >
-                      <GripVertical className="w-3 h-3" />
-                    </span>
-                  )}
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setShowMenu(showMenu === page.id ? null : page.id)
+                    }}
+                    className="p-0.5 text-gray-400 hover:text-gray-600 rounded cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <GripVertical className="w-3 h-3" />
+                  </span>
                 </button>
               )}
 

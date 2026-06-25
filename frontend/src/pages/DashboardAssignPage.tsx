@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore'
 import api from '../api/client'
 import { useToast } from '../components/Toast'
 import { ArrowRight, UserPlus, Trash2, Pencil, X, Shield, Filter, Eye, ChevronDown, ChevronUp, Users, Check } from 'lucide-react'
+import ThemeToggle from '../components/ThemeToggle'
 
 interface Dashboard {
   id: number
@@ -258,8 +259,8 @@ export default function DashboardAssignPage() {
                 <p className="text-xs text-gray-500">تعریف دسترسی کارکنان به داشبوردها با فیلترهای داده خاص</p>
               </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
+          </div>            <div className="flex items-center gap-2">
+            <ThemeToggle />
             <button
               onClick={() => setShowBulkModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition text-sm font-medium"

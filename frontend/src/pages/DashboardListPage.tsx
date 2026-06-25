@@ -5,6 +5,7 @@ import api from '../api/client'
 import { useToast } from '../components/Toast'
 import { Plus, BarChart3, Upload, LogOut, ChevronLeft, LayoutTemplate, TrendingUp, DollarSign, Megaphone, Users, ShoppingBag, Trash2, Copy, Share2, Shield, MoreVertical, X, UserCheck, FolderTree, Network } from 'lucide-react'
 import NotificationBell from '../components/NotificationBell'
+import ThemeToggle from '../components/ThemeToggle'
 import { ALL_ROLES } from '../utils/roles'
 
 interface Dashboard {
@@ -230,6 +231,7 @@ export default function DashboardListPage() {
 
           <div className="flex items-center gap-4">
             <NotificationBell />
+            <ThemeToggle />
 
             <Link
               to="/data/upload"

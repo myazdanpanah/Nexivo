@@ -1038,6 +1038,7 @@ def assignment_bulk_create(request):
 
     created_count = 0
     skipped_count = 0
+    newly_assigned_users = []
     for u in target_users:
         _, created = DashboardAssignment.objects.get_or_create(
             dashboard=dashboard,
@@ -1052,6 +1053,7 @@ def assignment_bulk_create(request):
         )
         if created:
             created_count += 1
+            newly_assigned_users.append(u)
         else:
             skipped_count += 1
 
@@ -1071,9 +1073,8 @@ def assignment_bulk_create(request):
         details={"created": created_count, "skipped": skipped_count},
     )
 
-    # Notify all target users in bulk
-    if created_count > 0:
-        notified_users = list(target_users)
+    # Notify only newly assigned users (not skipped ones)
+    if newly_assigned_users:
         Notification.objects.bulk_create([
             Notification(
                 recipient=u,
@@ -1083,7 +1084,7 @@ def assignment_bulk_create(request):
                 target_type="dashboard",
                 target_id=str(dashboard.pk),
             )
-            for u in notified_users
+            for u in newly_assigned_users
         ])
 
     return Response({

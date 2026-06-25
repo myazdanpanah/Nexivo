@@ -67,11 +67,11 @@ export default function DataUploadPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50" dir="rtl">
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900" dir="rtl">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
         <div className="max-w-3xl mx-auto">
-          <h1 className="text-lg font-bold text-gray-900">بارگذاری داده</h1>
-          <p className="text-sm text-gray-500">فایل اکسل یا CSV خود را آپلود کنید</p>
+          <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">بارگذاری داده</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">فایل اکسل یا CSV خود را آپلود کنید</p>
         </div>
       </header>
 
@@ -120,7 +120,7 @@ export default function DataUploadPage() {
             </div>
 
             {/* Form */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   نام مجموعه داده
