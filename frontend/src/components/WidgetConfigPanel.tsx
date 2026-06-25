@@ -57,8 +57,10 @@ interface Dataset {
 
 export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPanelProps) {
   const { id: dashboardId } = useParams<{ id: string }>()
-  const { widgets, updateWidget } = useDashboardStore()
-  const widget = widgets.find((w) => w.id === widgetId)
+  const { widgets, pages, activePageId, updateWidget } = useDashboardStore()
+  // Look up widget from active page first, then fall back to global widgets array
+  const activePage = pages.find((p) => p.id === activePageId)
+  const widget = activePage?.widgets.find((w) => w.id === widgetId) || widgets.find((w) => w.id === widgetId)
 
   const [title, setTitle] = useState(widget?.title || '')
   const [chartType, setChartType] = useState(widget?.chartType || 'bar')
