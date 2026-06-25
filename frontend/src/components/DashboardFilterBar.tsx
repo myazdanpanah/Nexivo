@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useDashboardStore, controlFiltersToQuery, type DashboardFilterControl } from '../store/dashboardStore'
-import { X, Plus, Filter, ChevronDown, ChevronUp, Calendar, Search, CheckSquare, Sliders, Trash2 } from 'lucide-react'
+import { X, Plus, Filter, ChevronDown, ChevronUp, Calendar, Search, CheckSquare, Sliders, Trash2, Shield } from 'lucide-react'
 import api from '../api/client'
+import { useAuthStore } from '../store/authStore'
 
 interface Dataset {
   id: number
@@ -17,6 +18,13 @@ const CONTROL_TYPES = [
   { value: 'checkbox', label: 'چک‌باکس', icon: CheckSquare },
   { value: 'slider', label: 'اسلایدر', icon: Sliders },
 ] as const
+
+const FILTER_ROLE_OPTIONS = [
+  { value: 'ceo', label: 'مدیرعامل' },
+  { value: 'finance', label: 'مالی' },
+  { value: 'sales', label: 'فروش' },
+  { value: 'admin', label: 'مدیر سیستم' },
+]
 
 function generateId(): string {
   return `fc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -47,6 +55,21 @@ export default function DashboardFilterBar() {
   const [newControlType, setNewControlType] = useState<DashboardFilterControl['type']>('dropdown')
   const [newControlLabel, setNewControlLabel] = useState('')
   const [newControlDatasetId, setNewControlDatasetId] = useState<number | null>(null)
+  const [newControlRoles, setNewControlRoles] = useState<string[]>([])
+  const [editingFilterRoles, setEditingFilterRoles] = useState<string | null>(null)
+  const editingFilterRef = useRef<HTMLDivElement>(null)
+
+  // Close filter role popover on outside click
+  useEffect(() => {
+    if (!editingFilterRoles) return
+    const handler = (e: MouseEvent) => {
+      if (editingFilterRef.current && !editingFilterRef.current.contains(e.target as Node)) {
+        setEditingFilterRoles(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [editingFilterRoles])
 
   // Get unique dataset IDs from all widgets
   const datasetIds = [...new Set(widgets.map((w) => w.datasetId).filter(Boolean))] as number[]
@@ -157,12 +180,18 @@ export default function DashboardFilterBar() {
       control.value = [range.min, range.max]
     }
 
+    // Apply selected role restrictions to the new filter control
+    if (newControlRoles.length > 0) {
+      control.allowedRoles = newControlRoles
+    }
+
     addFilterControl(control)
     setAddingControl(false)
     setNewControlCol('')
     setNewControlType('dropdown')
     setNewControlLabel('')
     setNewControlDatasetId(null)
+    setNewControlRoles([])
   }
 
   const handleControlValueChange = (controlId: string, value: string | number | string[] | [number, number] | null) => {
@@ -175,6 +204,14 @@ export default function DashboardFilterBar() {
   // Find which dataset to show columns for
   const selectedDs = newControlDatasetId ? datasets.find((d) => d.id === newControlDatasetId) : null
   const dsForNewControl = selectedDs || (datasets.find((d) => datasetIds.includes(d.id)))
+
+  // Enforce filter-level access: only show controls the current user's role has access to
+  const userRole = useAuthStore((s) => s.user?.role)
+  const visibleControls = filterControls.filter((c) => {
+    if (!c.allowedRoles || c.allowedRoles.length === 0) return true
+    if (!userRole) return false
+    return c.allowedRoles.includes(userRole)
+  })
 
   const hasActiveFilters = activeControlFilters.length > 0 || filters.length > 0
 
@@ -261,12 +298,25 @@ export default function DashboardFilterBar() {
       {expanded && (
         <div className="px-6 pb-3">
           <div className="flex flex-wrap gap-3 items-end">
-            {filterControls.map((control) => (
+            {visibleControls.map((control) => (
                 <div key={control.id} className="relative">
                   <FilterControlWidget
                     control={control}
                     onChange={(value) => handleControlValueChange(control.id, value)}
                   />
+                  {/* Filter access indicator */}
+                  {control.allowedRoles && control.allowedRoles.length > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center z-10" title={`فقط برای: ${control.allowedRoles.join(', ')}`}>
+                      <Shield className="w-2 h-2" />
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setEditingFilterRoles(editingFilterRoles === control.id ? null : control.id)}
+                    className="absolute -top-1.5 left-6 w-4 h-4 bg-amber-100 hover:bg-amber-200 text-amber-600 rounded-full flex items-center justify-center text-[8px] transition z-10"
+                    title="دسترسی فیلتر"
+                  >
+                    <Shield className="w-2 h-2" />
+                  </button>
                   <button
                     onClick={() => removeFilterControl(control.id)}
                     className="absolute -top-1 -left-1 w-4 h-4 bg-gray-200 hover:bg-red-400 hover:text-white rounded-full flex items-center justify-center text-[8px] text-gray-500 transition z-10"
@@ -274,6 +324,35 @@ export default function DashboardFilterBar() {
                   >
                     <Trash2 className="w-2 h-2" />
                   </button>
+                  {/* Inline role picker for filter */}
+                  {editingFilterRoles === control.id && (
+                    <div ref={editingFilterRef} className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 min-w-[140px]">
+                      <div className="text-[10px] font-medium text-gray-600 mb-1">دسترسی فیلتر:</div>
+                      {FILTER_ROLE_OPTIONS.map((r) => (
+                        <label key={r.value} className="flex items-center gap-1.5 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!control.allowedRoles || control.allowedRoles.length === 0 || control.allowedRoles.includes(r.value)}
+                            onChange={(e) => {
+                              const current = control.allowedRoles || []
+                              const allRoles = FILTER_ROLE_OPTIONS.map((x) => x.value)
+                              let newRoles: string[]
+                              if (e.target.checked) {
+                                newRoles = [...current, r.value]
+                                if (newRoles.length === allRoles.length) newRoles = []
+                              } else {
+                                newRoles = current.filter((x) => x !== r.value)
+                              }
+                              updateFilterControl(control.id, { allowedRoles: newRoles })
+                            }}
+                            className="w-3 h-3 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                          />
+                          <span className="text-[10px] text-gray-600">{r.label}</span>
+                        </label>
+                      ))}
+                      <p className="text-[9px] text-gray-400 mt-1">بدون انتخاب = همه</p>
+                    </div>
+                  )}
                 </div>
             ))}
 
@@ -335,6 +414,31 @@ export default function DashboardFilterBar() {
                   placeholder="برچسب (اختیاری)"
                   className="w-full px-2 py-1.5 rounded-lg border border-gray-300 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
                 />
+
+                {/* Filter access control */}
+                <div>
+                  <div className="text-[10px] text-gray-500 mb-1 flex items-center gap-1">
+                    <Shield className="w-2.5 h-2.5" />
+                    دسترسی فیلتر (اختیاری)
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {FILTER_ROLE_OPTIONS.map((r) => (
+                      <button
+                        key={r.value}
+                        type="button"
+                        onClick={() => setNewControlRoles((prev) => prev.includes(r.value) ? prev.filter((v) => v !== r.value) : [...prev, r.value])}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-medium border transition ${
+                          newControlRoles.includes(r.value)
+                            ? 'bg-indigo-100 text-indigo-700 border-indigo-300'
+                            : 'bg-gray-50 text-gray-400 border-gray-200'
+                        }`}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[9px] text-gray-400 mt-0.5">بدون انتخاب = همه</p>
+                </div>
 
                 <div className="flex gap-2">
                   <button

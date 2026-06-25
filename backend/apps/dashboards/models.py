@@ -158,3 +158,65 @@ class Widget(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.chart_type})"
+
+
+class PermissionAuditLog(models.Model):
+    """
+    Tracks permission-related changes on dashboards, pages, and filters.
+    """
+
+    ACTION_CHOICES = [
+        ("dashboard_share", "Dashboard Share"),
+        ("dashboard_create", "Dashboard Create"),
+        ("dashboard_delete", "Dashboard Delete"),
+        ("page_access_update", "Page Access Update"),
+        ("filter_access_update", "Filter Access Update"),
+        ("user_role_change", "User Role Change"),
+    ]
+
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="audit_logs",
+    )
+    # What was changed
+    target_type = models.CharField(
+        max_length=50,
+        help_text="Type of object: dashboard, page, filter_control, user",
+    )
+    target_id = models.CharField(
+        max_length=100,
+        help_text="ID of the affected object",
+    )
+    target_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Human-readable name of the affected object",
+    )
+    # Details
+    old_value = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Previous allowed_roles value",
+    )
+    new_value = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="New allowed_roles value",
+    )
+    details = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional context",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.action} by {self.user} on {self.target_type}:{self.target_id}"

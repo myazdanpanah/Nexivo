@@ -1,9 +1,9 @@
 import logging
 
-from rest_framework import status, permissions
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework import status
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import Dashboard, DashboardPage, Widget
+from .models import Dashboard, DashboardPage, Widget, PermissionAuditLog
 from .serializers import (
     DashboardSerializer,
     DashboardCreateSerializer,
@@ -161,7 +161,7 @@ def dashboard_create_from_template(request):
         description=tmpl["description"],
         owner=request.user,
         is_published=True,
-        allowed_roles=["ceo", "finance", "sales"],
+        allowed_roles=["ceo", "finance", "sales", "admin"],
     )
 
     # Create pages and widgets
@@ -224,9 +224,17 @@ def dashboard_list(request):
     elif request.method == "POST":
         serializer = DashboardCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        dashboard = serializer.save(owner=request.user)
+        dashboard = serializer.save(owner=request.user, is_published=True)
         # Auto-create first page
         DashboardPage.objects.create(dashboard=dashboard, name="صفحه ۱", order=0)
+        PermissionAuditLog.objects.create(
+            action="dashboard_create",
+            user=request.user,
+            target_type="dashboard",
+            target_id=str(dashboard.pk),
+            target_name=dashboard.name,
+            new_value={"allowed_roles": dashboard.allowed_roles},
+        )
         return Response(
             DashboardSerializer(dashboard).data,
             status=status.HTTP_201_CREATED,
@@ -271,10 +279,11 @@ def dashboard_layout(request, pk):
     except Dashboard.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
+    # Allow owner, CEO, admin, or anyone with dashboard access
     if request.user.role != "ceo" and not request.user.is_staff:
-        if dashboard.owner != request.user:
+        if dashboard.owner != request.user and request.user.role not in dashboard.allowed_roles:
             return Response(
-                {"error": "Only the owner can modify layout"},
+                {"error": "You do not have permission to modify this dashboard"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -316,9 +325,9 @@ def dashboard_filter_controls(request, pk):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     if request.user.role != "ceo" and not request.user.is_staff:
-        if dashboard.owner != request.user:
+        if dashboard.owner != request.user and request.user.role not in dashboard.allowed_roles:
             return Response(
-                {"error": "Only the owner can modify filters"},
+                {"error": "You do not have permission to modify this dashboard"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -338,9 +347,9 @@ def page_create(request, dashboard_pk):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     if request.user.role != "ceo" and not request.user.is_staff:
-        if dashboard.owner != request.user:
+        if dashboard.owner != request.user and request.user.role not in dashboard.allowed_roles:
             return Response(
-                {"error": "Only the owner can add pages"},
+                {"error": "You do not have permission to modify this dashboard"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -349,6 +358,16 @@ def page_create(request, dashboard_pk):
     if "order" not in serializer.validated_data:
         serializer.validated_data["order"] = dashboard.pages.count()
     page = serializer.save(dashboard=dashboard)
+    if page.allowed_roles:
+        PermissionAuditLog.objects.create(
+            action="page_access_update",
+            user=request.user,
+            target_type="page",
+            target_id=str(page.pk),
+            target_name=page.name,
+            new_value={"allowed_roles": page.allowed_roles},
+            details={"dashboard_id": dashboard_pk},
+        )
     return Response(
         DashboardPageSerializer(page).data,
         status=status.HTTP_201_CREATED,
@@ -375,9 +394,22 @@ def page_detail(request, dashboard_pk, page_pk):
         return Response(DashboardPageSerializer(page).data)
 
     elif request.method == "PUT":
+        old_roles = list(page.allowed_roles or [])
         serializer = DashboardPageCreateSerializer(page, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        new_roles = list(page.allowed_roles or [])
+        if old_roles != new_roles:
+            PermissionAuditLog.objects.create(
+                action="page_access_update",
+                user=request.user,
+                target_type="page",
+                target_id=str(page.pk),
+                target_name=page.name,
+                old_value={"allowed_roles": old_roles},
+                new_value={"allowed_roles": new_roles},
+                details={"dashboard_id": dashboard_pk},
+            )
         return Response(DashboardPageSerializer(page).data)
 
     elif request.method == "DELETE":
@@ -394,9 +426,9 @@ def page_duplicate(request, dashboard_pk, page_pk):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     if request.user.role != "ceo" and not request.user.is_staff:
-        if dashboard.owner != request.user:
+        if dashboard.owner != request.user and request.user.role not in dashboard.allowed_roles:
             return Response(
-                {"error": "Only the owner can duplicate pages"},
+                {"error": "You do not have permission to modify this dashboard"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -458,9 +490,9 @@ def page_reorder(request, dashboard_pk):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     if request.user.role != "ceo" and not request.user.is_staff:
-        if dashboard.owner != request.user:
+        if dashboard.owner != request.user and request.user.role not in dashboard.allowed_roles:
             return Response(
-                {"error": "Only the owner can reorder pages"},
+                {"error": "You do not have permission to modify this dashboard"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -496,9 +528,9 @@ def page_import(request, dashboard_pk):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     if request.user.role != "ceo" and not request.user.is_staff:
-        if dashboard.owner != request.user:
+        if dashboard.owner != request.user and request.user.role not in dashboard.allowed_roles:
             return Response(
-                {"error": "Only the owner can import pages"},
+                {"error": "You do not have permission to modify this dashboard"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -545,9 +577,9 @@ def widget_create(request, dashboard_pk):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     if request.user.role != "ceo" and not request.user.is_staff:
-        if dashboard.owner != request.user:
+        if dashboard.owner != request.user and request.user.role not in dashboard.allowed_roles:
             return Response(
-                {"error": "Only the owner can add widgets"},
+                {"error": "You do not have permission to modify this dashboard"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -580,3 +612,191 @@ def widget_detail(request, dashboard_pk, widget_pk):
     elif request.method == "DELETE":
         widget.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---- Dashboard Duplicate ----
+
+@api_view(["POST"])
+def dashboard_duplicate(request, pk):
+    """Duplicate a dashboard with all its pages and widgets."""
+    try:
+        source = Dashboard.objects.get(pk=pk)
+    except Dashboard.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    # Access check
+    if request.user.role != "ceo" and not request.user.is_staff:
+        if request.user.role not in source.allowed_roles:
+            return Response(
+                {"error": "You do not have access to this dashboard"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+    new_dashboard = Dashboard.objects.create(
+        name=f"{source.name} (کپی)",
+        description=source.description,
+        owner=request.user,
+        allowed_roles=source.allowed_roles,
+        is_published=True,
+        filter_controls=source.filter_controls,
+    )
+
+    PermissionAuditLog.objects.create(
+        action="dashboard_create",
+        user=request.user,
+        target_type="dashboard",
+        target_id=str(new_dashboard.pk),
+        target_name=new_dashboard.name,
+        new_value={"allowed_roles": new_dashboard.allowed_roles},
+        details={"source_dashboard_id": source.pk},
+    )
+
+    # Copy pages and widgets
+    for source_page in source.pages.all().order_by("order"):
+        new_page = DashboardPage.objects.create(
+            dashboard=new_dashboard,
+            name=source_page.name,
+            order=source_page.order,
+            filter_controls=source_page.filter_controls,
+            allowed_roles=source_page.allowed_roles,
+        )
+
+        id_map = {}
+        for widget in source_page.widgets.all():
+            new_widget = Widget.objects.create(
+                dashboard=new_dashboard,
+                page=new_page,
+                title=widget.title,
+                chart_type=widget.chart_type,
+                dataset=widget.dataset,
+                chart_config=widget.chart_config,
+                query_config=widget.query_config,
+                grid_x=widget.grid_x,
+                grid_y=widget.grid_y,
+                grid_w=widget.grid_w,
+                grid_h=widget.grid_h,
+                order=widget.order,
+            )
+            id_map[str(widget.id)] = str(new_widget.id)
+
+        # Remap layout IDs
+        new_layout = []
+        for item in source_page.layout:
+            new_item = dict(item)
+            new_item["i"] = id_map.get(str(item.get("i", "")), str(item.get("i", "")))
+            new_layout.append(new_item)
+        new_page.layout = new_layout
+        new_page.save(update_fields=["layout"])
+
+    return Response(
+        DashboardSerializer(new_dashboard).data,
+        status=status.HTTP_201_CREATED,
+    )
+
+
+# ---- Dashboard Share ----
+
+@api_view(["PUT"])
+def dashboard_share(request, pk):
+    """Update allowed_roles for a dashboard (share with roles)."""
+    try:
+        dashboard = Dashboard.objects.get(pk=pk)
+    except Dashboard.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    # Only owner, CEO, or admin can share
+    if request.user.role not in ("ceo", "admin") and not request.user.is_staff:
+        if dashboard.owner != request.user:
+            return Response(
+                {"error": "Only the owner can share this dashboard"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+    allowed_roles = request.data.get("allowed_roles")
+    if allowed_roles is None:
+        return Response(
+            {"error": "allowed_roles is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    old_roles = list(dashboard.allowed_roles)
+    dashboard.allowed_roles = allowed_roles
+    dashboard.save(update_fields=["allowed_roles"])
+
+    # Audit log
+    PermissionAuditLog.objects.create(
+        action="dashboard_share",
+        user=request.user,
+        target_type="dashboard",
+        target_id=str(dashboard.pk),
+        target_name=dashboard.name,
+        old_value={"allowed_roles": old_roles},
+        new_value={"allowed_roles": allowed_roles},
+    )
+
+    return Response(DashboardSerializer(dashboard).data)
+
+
+# ---- Audit Log ----
+
+@api_view(["GET"])
+def audit_log_list(request):
+    """List audit log entries (admin/CEO only)."""
+    if request.user.role not in ("admin", "ceo") and not request.user.is_staff:
+        return Response(
+            {"error": "Permission denied"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    logs = PermissionAuditLog.objects.select_related("user").all()[:100]
+    data = []
+    for log in logs:
+        data.append({
+            "id": log.id,
+            "action": log.action,
+            "action_display": log.get_action_display(),
+            "user": log.user.username if log.user else None,
+            "target_type": log.target_type,
+            "target_id": log.target_id,
+            "target_name": log.target_name,
+            "old_value": log.old_value,
+            "new_value": log.new_value,
+            "details": log.details,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        })
+    return Response(data)
+
+
+# ---- Dashboard Clear All ----
+
+@api_view(["DELETE"])
+def dashboard_clear_all(request):
+    """Delete all dashboards, pages, and widgets (superuser only)."""
+    if not request.user.is_staff:
+        return Response(
+            {"error": "Only superusers can clear all data"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    confirm = request.data.get("confirm")
+    if confirm is not True:
+        return Response(
+            {"error": "Set confirm=true to delete all data"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    widget_count = Widget.objects.count()
+    page_count = DashboardPage.objects.count()
+    dashboard_count = Dashboard.objects.count()
+
+    Widget.objects.all().delete()
+    DashboardPage.objects.all().delete()
+    Dashboard.objects.all().delete()
+
+    return Response({
+        "deleted": {
+            "dashboards": dashboard_count,
+            "pages": page_count,
+            "widgets": widget_count,
+        }
+    })

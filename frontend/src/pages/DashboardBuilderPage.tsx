@@ -8,7 +8,8 @@ import WidgetConfigPanel from '../components/WidgetConfigPanel'
 import DashboardFilterBar from '../components/DashboardFilterBar'
 import PageNavBar from '../components/PageNavBar'
 import { useToast } from '../components/Toast'
-import { Plus, ArrowRight, Settings, Trash2 } from 'lucide-react'
+import { Plus, ArrowRight, Settings, Trash2, Share2, X } from 'lucide-react'
+import { ALL_ROLES } from '../utils/roles'
 
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
@@ -39,6 +40,9 @@ export default function DashboardBuilderPage() {
   const [editingWidget, setEditingWidget] = useState<string | null>(null)
   const [mobileSettingsWidget, setMobileSettingsWidget] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
+  // Share modal state
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [shareRoles, setShareRoles] = useState<string[]>([])
   // Drill-down state
   const [drillState, setDrillState] = useState<Record<string, Array<{ col: string; value: string }>>>({})
 
@@ -195,6 +199,28 @@ export default function DashboardBuilderPage() {
     }
   }
 
+  const openShareModal = async () => {
+    if (!id) return
+    try {
+      const res = await api.get(`/dashboards/${id}/`)
+      setShareRoles(res.data.allowed_roles || [])
+      setShowShareModal(true)
+    } catch {
+      toast('خطا در دریافت اطلاعات', 'error')
+    }
+  }
+
+  const handleShareSave = async () => {
+    if (!id) return
+    try {
+      await api.put(`/dashboards/${id}/share/`, { allowed_roles: shareRoles })
+      setShowShareModal(false)
+      toast('دسترسی‌ها به‌روز شد', 'success')
+    } catch {
+      toast('خطا در به‌روزرسانی دسترسی‌ها', 'error')
+    }
+  }
+
   const deleteWidget = async (widgetId: string) => {
     if (!id) return
     if (!window.confirm('آیا از حذف این نمودار اطمینان دارید؟')) return
@@ -224,6 +250,14 @@ export default function DashboardBuilderPage() {
             <h1 className="text-lg font-bold text-gray-900">ویرایشگر داشبورد</h1>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={openShareModal}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"
+              title="اشتراک‌گذاری و دسترسی"
+            >
+              <Share2 className="w-4 h-4" />
+              اشتراک‌گذاری
+            </button>
             <button
               onClick={addNewWidget}
               className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm"
@@ -370,6 +404,55 @@ export default function DashboardBuilderPage() {
           widgetId={mobileSettingsWidget}
           onClose={() => setMobileSettingsWidget(null)}
         />
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" dir="rtl">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowShareModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="font-bold text-gray-900">اشتراک‌گذاری و دسترسی</h3>
+              <button onClick={() => setShowShareModal(false)} className="p-1 text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-500 mb-4">نقش‌هایی که به این داشبورد دسترسی دارند:</p>
+              <div className="space-y-2">
+                {ALL_ROLES.map((r) => (
+                  <label
+                    key={r.value}
+                    className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:bg-gray-50 cursor-pointer transition"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={shareRoles.includes(r.value)}
+                      onChange={() => setShareRoles((prev) => prev.includes(r.value) ? prev.filter((v) => v !== r.value) : [...prev, r.value])}
+                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">{r.label}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-3">بدون انتخاب = همه نقش‌ها مجازند</p>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition"
+              >
+                انصراف
+              </button>
+              <button
+                onClick={handleShareSave}
+                className="px-6 py-2 bg-indigo-600 text-white text-sm rounded-xl hover:bg-indigo-700 transition font-medium"
+              >
+                ذخیره دسترسی‌ها
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

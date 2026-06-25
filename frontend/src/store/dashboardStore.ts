@@ -53,6 +53,8 @@ export interface DashboardFilterControl {
   value: string | number | string[] | [number, number] | null
   // Multi-select for dropdown/checkbox
   multiSelect?: boolean
+  // Filter-level access control: roles allowed to see/use this filter (empty = all)
+  allowedRoles?: string[]
 }
 
 interface DashboardState {

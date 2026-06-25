@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useDashboardStore, type DashboardPageConfig, type DashboardFilterControl } from '../store/dashboardStore'
+import { useAuthStore } from '../store/authStore'
 import { useToast } from './Toast'
 import { Plus, GripVertical, Pencil, Check, Copy, Trash2, Download, Upload, Shield } from 'lucide-react'
 import api from '../api/client'
@@ -253,14 +254,30 @@ export default function PageNavBar() {
     setDragOverIndex(null)
   }
 
-  if (pages.length === 0) return null
+  // Filter pages by role access for display
+  const userRole = useAuthStore((s) => s.user?.role)
+  const visiblePages = pages.filter((page) => {
+    const pr = page.allowedRoles
+    if (!pr || pr.length === 0) return true
+    if (!userRole) return false
+    return pr.includes(userRole)
+  })
+
+  // If active page is not visible, auto-select the first visible page
+  useEffect(() => {
+    if (activePageId && visiblePages.length > 0 && !visiblePages.find((p) => p.id === activePageId)) {
+      setActivePage(visiblePages[0].id)
+    }
+  }, [activePageId, visiblePages, setActivePage])
+
+  if (visiblePages.length === 0) return null
 
   return (
     <div className="bg-white border-b border-gray-200 px-6" dir="rtl">
       <div className="flex items-center gap-1 overflow-x-auto py-1 scrollbar-thin">
-        {pages.map((page, index) => {
+        {visiblePages.map((page, index) => {
           const isActive = page.id === activePageId
-          const pageRoles = (page as unknown as Record<string, unknown>).allowedRoles as string[] | undefined
+          const pageRoles = page.allowedRoles
           return (
             <div
               key={page.id}
@@ -314,15 +331,17 @@ export default function PageNavBar() {
                     <Shield className="w-3 h-3 text-amber-500" />
                   )}
                   {isActive && (
-                    <button
+                    <span
+                      role="button"
+                      tabIndex={0}
                       onClick={(e) => {
                         e.stopPropagation()
                         setShowMenu(showMenu === page.id ? null : page.id)
                       }}
-                      className="p-0.5 text-gray-400 hover:text-gray-600 rounded"
+                      className="p-0.5 text-gray-400 hover:text-gray-600 rounded cursor-pointer"
                     >
                       <GripVertical className="w-3 h-3" />
-                    </button>
+                    </span>
                   )}
                 </button>
               )}
@@ -397,7 +416,7 @@ export default function PageNavBar() {
           )
         })}
 
-        {/* Add page button */}
+        {/* Add page button — visible to anyone with dashboard access */}
         <button
           onClick={handleAddPage}
           className="flex items-center gap-1 px-2 py-1.5 text-xs text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
@@ -405,8 +424,6 @@ export default function PageNavBar() {
         >
           <Plus className="w-3.5 h-3.5" />
         </button>
-
-        {/* Import page button */}
         <button
           onClick={handleImportPage}
           className="flex items-center gap-1 px-2 py-1.5 text-xs text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"

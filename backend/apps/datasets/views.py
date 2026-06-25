@@ -158,6 +158,34 @@ def dataset_query(request, pk):
     metrics_map = request.data.get("metrics", {})  # {col: FUNC}
     additional_filters = request.data.get("filters", [])
 
+    # Filter-level role enforcement: if the request includes filterControls with allowedRoles,
+    # only apply filters that the current user's role has access to
+    filter_controls = request.data.get("filterControls", [])
+    if filter_controls:
+        user_role = request.user.role
+        # Map control type to operator(s)
+        TYPE_TO_OP = {
+            'dropdown': 'eq',
+            'checkbox': 'in',
+            'text_search': 'contains',
+            'date_range': 'between',
+            'slider': 'between',
+        }
+        for fc in filter_controls:
+            fc_roles = fc.get("allowedRoles", [])
+            if fc_roles and user_role and user_role not in fc_roles:
+                continue  # Skip restricted filters
+            fc_type = fc.get("type", "dropdown")
+            fc_val = fc.get("value")
+            fc_col = fc.get("col")
+            if not fc_val or not fc_col:
+                continue
+            op = TYPE_TO_OP.get(fc_type, "eq")
+            # Upgrade eq to in for multi-select values
+            if op == "eq" and isinstance(fc_val, list):
+                op = "in"
+            additional_filters.append({"col": fc_col, "op": op, "val": fc_val})
+
     # Validate requested columns against dataset schema to prevent SQL injection
     valid_columns = set(dataset.column_names)
     columns = [c for c in requested_columns if c in valid_columns]

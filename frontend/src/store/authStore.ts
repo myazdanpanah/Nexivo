@@ -9,6 +9,7 @@ interface User {
   last_name: string
   role: 'finance' | 'sales' | 'ceo' | 'admin'
   department: string
+  isStaff?: boolean
 }
 
 interface AuthState {

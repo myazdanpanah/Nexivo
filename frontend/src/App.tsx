@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage'
 import DashboardListPage from './pages/DashboardListPage'
 import DashboardBuilderPage from './pages/DashboardBuilderPage'
 import DataUploadPage from './pages/DataUploadPage'
+import AdminSettingsPage from './pages/AdminSettingsPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token)
@@ -18,6 +19,7 @@ export default function App() {
       <Route path="/dashboards" element={<PrivateRoute><DashboardListPage /></PrivateRoute>} />
       <Route path="/dashboards/:id" element={<PrivateRoute><DashboardBuilderPage /></PrivateRoute>} />
       <Route path="/data/upload" element={<PrivateRoute><DataUploadPage /></PrivateRoute>} />
+      <Route path="/admin/users" element={<PrivateRoute><AdminSettingsPage /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/dashboards" replace />} />
     </Routes>
   )

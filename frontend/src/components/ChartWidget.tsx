@@ -527,6 +527,7 @@ function buildChartOption(
       })
     }
 
+    const graphColors = resolveColors(customConfig, nodeMap.size)
     const nodes = [...nodeMap.entries()].map(([name, degree], i) => ({
       name,
       symbolSize: Math.min(30 + degree * 5, 60),
@@ -534,7 +535,6 @@ function buildChartOption(
     }))
 
     const graphDefaults = getChartDefaults('graph') as Record<string, unknown>
-    const graphColors = resolveColors(customConfig, nodes.length)
     return {
       ...graphDefaults,
       ...customConfig,
