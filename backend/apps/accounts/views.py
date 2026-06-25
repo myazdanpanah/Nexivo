@@ -131,10 +131,41 @@ def user_detail_view(request, pk):
             "username", "email", "first_name", "last_name", "role", "department",
             "company", "division", "team", "reports_to",
         ]
+        old_division = user.division_id
+        old_team = user.team_id
         for field in allowed_fields:
             if field in request.data:
                 setattr(user, field, request.data[field])
         user.save()
+
+        # Auto-assignment: when a user is added to a division or team,
+        # check if that org unit has existing dashboard assignments and
+        # replicate them for the new user.
+        new_division = user.division_id
+        new_team = user.team_id
+        if (new_division and new_division != old_division) or (new_team and new_team != old_team):
+            from apps.dashboards.models import DashboardAssignment, Dashboard
+            existing_assignments = DashboardAssignment.objects.filter(
+                is_active=True,
+            ).filter(
+                models.Q(assigned_to__division_id=new_division) | models.Q(assigned_to__team_id=new_team)
+            ).values_list('dashboard_id', 'data_filters', 'visible_pages').distinct()
+            assigned_dash_ids = set()
+            for dash_id, d_filters, v_pages in existing_assignments:
+                if dash_id not in assigned_dash_ids:
+                    DashboardAssignment.objects.get_or_create(
+                        dashboard_id=dash_id,
+                        assigned_to=user,
+                        defaults={
+                            "assigned_by": request.user,
+                            "data_filters": d_filters or [],
+                            "visible_pages": v_pages or [],
+                            "notes": f"خودکار: اضافه شده به ساختار سازمانی",
+                            "is_active": True,
+                        },
+                    )
+                    assigned_dash_ids.add(dash_id)
+
         return Response(UserSerializer(user).data)
 
     elif request.method == "DELETE":

@@ -14,6 +14,14 @@ interface User {
   last_name: string
   role: 'finance' | 'sales' | 'ceo' | 'admin'
   department: string
+  company: number | null
+  company_name: string | null
+  division: number | null
+  division_name: string | null
+  team: number | null
+  team_name: string | null
+  reports_to: number | null
+  reports_to_name: string | null
 }
 
 interface AuditLog {
@@ -29,6 +37,10 @@ interface AuditLog {
   details: Record<string, unknown>
   created_at: string
 }
+
+interface OrgCompany { id: number; name: string }
+interface OrgDivision { id: number; name: string; company: number }
+interface OrgTeam { id: number; name: string; division: number }
 
 const ACTION_LABELS: Record<string, string> = {
   dashboard_share: 'اشتراک‌گذاری داشبورد',
@@ -63,6 +75,10 @@ export default function AdminSettingsPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [auditLoading, setAuditLoading] = useState(true)
   const [expandedLog, setExpandedLog] = useState<number | null>(null)
+  const [companies, setCompanies] = useState<OrgCompany[]>([])
+  const [divisions, setDivisions] = useState<OrgDivision[]>([])
+  const [teams, setTeams] = useState<OrgTeam[]>([])
+  const [allUsers, setAllUsers] = useState<User[]>([])
   const [form, setForm] = useState({
     username: '',
     email: '',
@@ -71,6 +87,10 @@ export default function AdminSettingsPage() {
     role: 'sales' as string,
     department: '',
     password: '',
+    company: null as number | null,
+    division: null as number | null,
+    team: null as number | null,
+    reports_to: null as number | null,
   })
 
   useEffect(() => {
@@ -80,17 +100,30 @@ export default function AdminSettingsPage() {
     }
     fetchUsers()
     fetchAuditLogs()
+    fetchOrgData()
   }, [user, navigate])
+
+  const fetchOrgData = async () => {
+    try {
+      const [compRes, divRes, teamRes, userRes] = await Promise.all([
+        api.get('/auth/companies/'),
+        api.get('/auth/divisions/'),
+        api.get('/auth/teams/'),
+        api.get('/auth/users/'),
+      ])
+      setCompanies(compRes.data)
+      setDivisions(divRes.data)
+      setTeams(teamRes.data)
+      setAllUsers(userRes.data)
+    } catch { /* ignore */ }
+  }
 
   const fetchAuditLogs = async () => {
     try {
       const res = await api.get('/dashboards/audit-log/')
       setAuditLogs(res.data)
-    } catch {
-      // ignore
-    } finally {
-      setAuditLoading(false)
-    }
+    } catch { /* ignore */ }
+    finally { setAuditLoading(false) }
   }
 
   const fetchUsers = async () => {
@@ -104,9 +137,12 @@ export default function AdminSettingsPage() {
     }
   }
 
+  const filteredDivisions = divisions.filter((d) => !form.company || d.company === form.company)
+  const filteredTeams = teams.filter((t) => !form.division || t.division === form.division)
+
   const openCreateModal = () => {
     setEditingUser(null)
-    setForm({ username: '', email: '', first_name: '', last_name: '', role: 'sales', department: '', password: '' })
+    setForm({ username: '', email: '', first_name: '', last_name: '', role: 'sales', department: '', password: '', company: null, division: null, team: null, reports_to: null })
     setShowModal(true)
   }
 
@@ -120,6 +156,10 @@ export default function AdminSettingsPage() {
       role: u.role,
       department: u.department,
       password: '',
+      company: u.company,
+      division: u.division,
+      team: u.team,
+      reports_to: u.reports_to,
     })
     setShowModal(true)
   }
@@ -132,13 +172,17 @@ export default function AdminSettingsPage() {
 
     try {
       if (editingUser) {
-        const payload: Record<string, string> = {
+        const payload: Record<string, unknown> = {
           username: form.username,
           email: form.email,
           first_name: form.first_name,
           last_name: form.last_name,
           role: form.role,
           department: form.department,
+          company: form.company,
+          division: form.division,
+          team: form.team,
+          reports_to: form.reports_to,
         }
         await api.put(`/auth/users/${editingUser.id}/`, payload)
         toast('کاربر به‌روزرسانی شد', 'success')
@@ -155,11 +199,16 @@ export default function AdminSettingsPage() {
           role: form.role,
           department: form.department,
           password: form.password,
+          company: form.company,
+          division: form.division,
+          team: form.team,
+          reports_to: form.reports_to,
         })
         toast('کاربر جدید ساخته شد', 'success')
       }
       setShowModal(false)
       fetchUsers()
+      fetchOrgData()
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } }
       toast(axiosErr.response?.data?.error || 'خطا در ذخیره', 'error')
@@ -230,7 +279,6 @@ export default function AdminSettingsPage() {
         </div>
       </header>
 
-      {/* Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -252,7 +300,7 @@ export default function AdminSettingsPage() {
           })}
         </div>
 
-        {/* Danger Zone (superuser only) */}
+        {/* Danger Zone */}
         {user?.isStaff && (
           <div className="mb-8 bg-white rounded-2xl border-2 border-red-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-red-100 flex items-center justify-between">
@@ -272,29 +320,13 @@ export default function AdminSettingsPage() {
           </div>
         )}
 
-        {/* Tab Navigation */}
+        {/* Tabs */}
         <div className="flex items-center gap-1 mb-6">
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${
-              activeTab === 'users'
-                ? 'bg-indigo-100 text-indigo-700'
-                : 'text-gray-500 hover:bg-gray-100'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            کاربران
+          <button onClick={() => setActiveTab('users')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${activeTab === 'users' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100'}`}>
+            <Users className="w-4 h-4" /> کاربران
           </button>
-          <button
-            onClick={() => setActiveTab('audit')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${
-              activeTab === 'audit'
-                ? 'bg-indigo-100 text-indigo-700'
-                : 'text-gray-500 hover:bg-gray-100'
-            }`}
-          >
-            <History className="w-4 h-4" />
-            تاریخچه تغییرات
+          <button onClick={() => setActiveTab('audit')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${activeTab === 'audit' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100'}`}>
+            <History className="w-4 h-4" /> تاریخچه تغییرات
           </button>
         </div>
 
@@ -304,7 +336,6 @@ export default function AdminSettingsPage() {
             <div className="px-6 py-4 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">لیست کاربران ({users.length})</h2>
             </div>
-
             {loading ? (
               <div className="p-12 text-center text-gray-500">در حال بارگذاری...</div>
             ) : users.length === 0 ? (
@@ -320,7 +351,7 @@ export default function AdminSettingsPage() {
                       <th className="px-6 py-3 font-medium">کاربر</th>
                       <th className="px-6 py-3 font-medium">ایمیل</th>
                       <th className="px-6 py-3 font-medium">نقش</th>
-                      <th className="px-6 py-3 font-medium">بخش</th>
+                      <th className="px-6 py-3 font-medium">ساختار سازمانی</th>
                       <th className="px-6 py-3 font-medium">عملیات</th>
                     </tr>
                   </thead>
@@ -332,37 +363,29 @@ export default function AdminSettingsPage() {
                           <td className="px-6 py-4">
                             <div>
                               <p className="text-sm font-medium text-gray-900">
-                                {u.first_name || u.last_name
-                                  ? `${u.first_name} ${u.last_name}`
-                                  : u.username}
+                                {u.first_name || u.last_name ? `${u.first_name} ${u.last_name}` : u.username}
                               </p>
                               <p className="text-xs text-gray-400">@{u.username}</p>
                             </div>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600">{u.email}</td>
                           <td className="px-6 py-4">
-                            <span className={`inline-flex px-2.5 py-0.5 rounded-lg text-xs font-medium ${roleInfo.color}`}>
-                              {roleInfo.label}
-                            </span>
+                            <span className={`inline-flex px-2.5 py-0.5 rounded-lg text-xs font-medium ${roleInfo.color}`}>{roleInfo.label}</span>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">{u.department || '-'}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-wrap gap-1">
+                              {u.company_name && <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[10px]">{u.company_name}</span>}
+                              {u.division_name && <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px]">{u.division_name}</span>}
+                              {u.team_name && <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded text-[10px]">{u.team_name}</span>}
+                              {u.reports_to_name && <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded text-[10px]">↑ {u.reports_to_name}</span>}
+                              {!u.company_name && !u.division_name && !u.team_name && <span className="text-xs text-gray-400">-</span>}
+                            </div>
+                          </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => openEditModal(u)}
-                                className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition"
-                                title="ویرایش"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
+                              <button onClick={() => openEditModal(u)} className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition" title="ویرایش"><Pencil className="w-4 h-4" /></button>
                               {u.id !== user?.id && (
-                                <button
-                                  onClick={() => handleDelete(u)}
-                                  className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
-                                  title="حذف"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                <button onClick={() => handleDelete(u)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition" title="حذف"><Trash2 className="w-4 h-4" /></button>
                               )}
                             </div>
                           </td>
@@ -376,13 +399,12 @@ export default function AdminSettingsPage() {
           </div>
         )}
 
-        {/* Audit Log Table */}
+        {/* Audit Log */}
         {activeTab === 'audit' && (
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">تاریخچه تغییرات دسترسی ({auditLogs.length})</h2>
             </div>
-
             {auditLoading ? (
               <div className="p-12 text-center text-gray-500">در حال بارگذاری...</div>
             ) : auditLogs.length === 0 ? (
@@ -409,38 +431,28 @@ export default function AdminSettingsPage() {
                           </p>
                         </div>
                       </div>
-                      <button
-                        onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}
-                        className="p-1 text-gray-400 hover:text-gray-600 transition"
-                      >
+                      <button onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)} className="p-1 text-gray-400 hover:text-gray-600 transition">
                         {expandedLog === log.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
                     </div>
-
                     {expandedLog === log.id && (
                       <div className="mt-3 pl-6 border-r-2 border-indigo-200 pr-3 space-y-2">
                         {Object.keys(log.old_value).length > 0 && (
                           <div>
                             <span className="text-[10px] text-gray-400 uppercase tracking-wide">قبل:</span>
-                            <pre className="text-xs text-red-600 bg-red-50 rounded-lg p-2 mt-1 overflow-x-auto">
-                              {JSON.stringify(log.old_value, null, 2)}
-                            </pre>
+                            <pre className="text-xs text-red-600 bg-red-50 rounded-lg p-2 mt-1 overflow-x-auto">{JSON.stringify(log.old_value, null, 2)}</pre>
                           </div>
                         )}
                         {Object.keys(log.new_value).length > 0 && (
                           <div>
                             <span className="text-[10px] text-gray-400 uppercase tracking-wide">بعد:</span>
-                            <pre className="text-xs text-green-600 bg-green-50 rounded-lg p-2 mt-1 overflow-x-auto">
-                              {JSON.stringify(log.new_value, null, 2)}
-                            </pre>
+                            <pre className="text-xs text-green-600 bg-green-50 rounded-lg p-2 mt-1 overflow-x-auto">{JSON.stringify(log.new_value, null, 2)}</pre>
                           </div>
                         )}
                         {Object.keys(log.details).length > 0 && (
                           <div>
                             <span className="text-[10px] text-gray-400 uppercase tracking-wide">جزئیات:</span>
-                            <pre className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2 mt-1 overflow-x-auto">
-                              {JSON.stringify(log.details, null, 2)}
-                            </pre>
+                            <pre className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2 mt-1 overflow-x-auto">{JSON.stringify(log.details, null, 2)}</pre>
                           </div>
                         )}
                       </div>
@@ -457,73 +469,39 @@ export default function AdminSettingsPage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" dir="rtl">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900">
-                {editingUser ? 'ویرایش کاربر' : 'کاربر جدید'}
-              </h3>
-              <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
-              </button>
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+              <h3 className="font-bold text-gray-900">{editingUser ? 'ویرایش کاربر' : 'کاربر جدید'}</h3>
+              <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">نام</label>
-                  <input
-                    type="text"
-                    value={form.first_name}
-                    onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  />
+                  <input type="text" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">نام خانوادگی</label>
-                  <input
-                    type="text"
-                    value={form.last_name}
-                    onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  />
+                  <input type="text" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">نام کاربری *</label>
-                <input
-                  type="text"
-                  value={form.username}
-                  onChange={(e) => setForm({ ...form, username: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  disabled={!!editingUser}
-                />
+                <input type="text" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" disabled={!!editingUser} />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">ایمیل *</label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                />
+                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">نقش *</label>
                 <div className="grid grid-cols-2 gap-2">
                   {ROLE_OPTIONS.map((r) => (
-                    <button
-                      key={r.value}
-                      type="button"
-                      onClick={() => setForm({ ...form, role: r.value })}
-                      className={`p-3 rounded-xl border-2 text-sm font-medium transition ${
-                        form.role === r.value
-                          ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                      }`}
-                    >
+                    <button key={r.value} type="button" onClick={() => setForm({ ...form, role: r.value })} className={`p-3 rounded-xl border-2 text-sm font-medium transition ${form.role === r.value ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
                       {r.label}
                     </button>
                   ))}
@@ -532,40 +510,57 @@ export default function AdminSettingsPage() {
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">بخش</label>
-                <input
-                  type="text"
-                  value={form.department}
-                  onChange={(e) => setForm({ ...form, department: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  placeholder="مثلاً: فروش، مالی، ..."
-                />
+                <input type="text" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" placeholder="مثلاً: فروش، مالی، ..." />
+              </div>
+
+              {/* Org Hierarchy */}
+              <div className="p-4 bg-gray-50 rounded-xl space-y-3">
+                <p className="text-xs font-bold text-gray-700">🏢 ساختار سازمانی</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-1">شرکت</label>
+                    <select value={form.company || ''} onChange={(e) => setForm({ ...form, company: Number(e.target.value) || null, division: null, team: null })} className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                      <option value="">بدون شرکت</option>
+                      {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-1">واحد</label>
+                    <select value={form.division || ''} onChange={(e) => setForm({ ...form, division: Number(e.target.value) || null, team: null })} className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" disabled={!form.company}>
+                      <option value="">بدون واحد</option>
+                      {filteredDivisions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-1">تیم</label>
+                    <select value={form.team || ''} onChange={(e) => setForm({ ...form, team: Number(e.target.value) || null })} className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" disabled={!form.division}>
+                      <option value="">بدون تیم</option>
+                      {filteredTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-1">گزارش‌دهی به</label>
+                    <select value={form.reports_to || ''} onChange={(e) => setForm({ ...form, reports_to: Number(e.target.value) || null })} className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                      <option value="">بدون مدیر</option>
+                      {allUsers.filter((u) => u.id !== editingUser?.id).map((u) => (
+                        <option key={u.id} value={u.id}>{u.first_name || u.last_name ? `${u.first_name} ${u.last_name}` : u.username}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
 
               {!editingUser && (
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">رمز عبور *</label>
-                  <input
-                    type="password"
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                    placeholder="حداقل ۸ کاراکتر"
-                  />
+                  <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" placeholder="حداقل ۸ کاراکتر" />
                 </div>
               )}
             </div>
 
             <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition"
-              >
-                انصراف
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="px-6 py-2 bg-indigo-600 text-white text-sm rounded-xl hover:bg-indigo-700 transition font-medium"
-              >
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition">انصراف</button>
+              <button onClick={handleSubmit} className="px-6 py-2 bg-indigo-600 text-white text-sm rounded-xl hover:bg-indigo-700 transition font-medium">
                 {editingUser ? 'ذخیره تغییرات' : 'ساخت کاربر'}
               </button>
             </div>

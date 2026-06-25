@@ -15,6 +15,7 @@ urlpatterns = [
     path("assignments/", views.assignment_list_create, name="assignment-list-create"),
     path("assignments/<int:pk>/", views.assignment_detail, name="assignment-detail"),
     path("my-assigned/", views.my_assigned_dashboards, name="my-assigned-dashboards"),
+    path("assignments/bulk/", views.assignment_bulk_create, name="assignment-bulk-create"),
     path("<int:dashboard_pk>/pages/", views.page_create, name="page-create"),
     path("<int:dashboard_pk>/pages/reorder/", views.page_reorder, name="page-reorder"),
     path("<int:dashboard_pk>/pages/import/", views.page_import, name="page-import"),

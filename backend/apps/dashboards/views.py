@@ -956,6 +956,108 @@ def my_assigned_dashboards(request):
     return Response(result)
 
 
+# ---- Bulk Assign (division/team) ----
+
+@api_view(["POST"])
+def assignment_bulk_create(request):
+    """
+    Bulk-create assignments for all users in a division or team.
+    Request body:
+      dashboard: int (required)
+      division_id: int (optional)
+      team_id: int (optional)
+      data_filters: list (optional, applied to all)
+      visible_pages: list (optional, applied to all)
+      notes: str (optional)
+    """
+    if request.user.role not in ("admin", "ceo") and not request.user.is_staff:
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+    dashboard_id = request.data.get("dashboard")
+    division_id = request.data.get("division_id")
+    team_id = request.data.get("team_id")
+    data_filters = request.data.get("data_filters", [])
+    visible_pages = request.data.get("visible_pages", [])
+    notes = request.data.get("notes", "")
+
+    if not dashboard_id:
+        return Response({"error": "dashboard is required"}, status=status.HTTP_400_BAD_REQUEST)
+    if not division_id and not team_id:
+        return Response({"error": "division_id or team_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        dashboard = Dashboard.objects.get(pk=dashboard_id)
+    except Dashboard.DoesNotExist:
+        return Response({"error": "Dashboard not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from apps.accounts.models import Team as OrgTeam, Division as OrgDivision
+
+    # Get users from division or team
+    if team_id:
+        try:
+            team = OrgTeam.objects.get(pk=team_id)
+        except OrgTeam.DoesNotExist:
+            return Response({"error": "Team not found"}, status=status.HTTP_404_NOT_FOUND)
+        target_users = team.members.all()
+        target_name = team.name
+    elif division_id:
+        try:
+            division = OrgDivision.objects.get(pk=division_id)
+        except OrgDivision.DoesNotExist:
+            return Response({"error": "Division not found"}, status=status.HTTP_404_NOT_FOUND)
+        # Get all users in the division (direct + in teams)
+        from django.db.models import Q
+        team_ids = division.teams.values_list("id", flat=True)
+        target_users = division.employees.filter(
+            Q(team_id__in=team_ids) | Q(team__isnull=True)
+        ).distinct()
+        target_name = division.name
+    else:
+        target_users = []
+        target_name = ""
+
+    created_count = 0
+    skipped_count = 0
+    for u in target_users:
+        _, created = DashboardAssignment.objects.get_or_create(
+            dashboard=dashboard,
+            assigned_to=u,
+            defaults={
+                "assigned_by": request.user,
+                "data_filters": data_filters,
+                "visible_pages": visible_pages,
+                "notes": notes,
+                "is_active": True,
+            },
+        )
+        if created:
+            created_count += 1
+        else:
+            skipped_count += 1
+
+    # Audit log
+    PermissionAuditLog.objects.create(
+        action="dashboard_share",
+        user=request.user,
+        target_type="bulk_assignment",
+        target_id=str(dashboard.pk),
+        target_name=f"{dashboard.name} → {target_name} ({created_count} users)",
+        new_value={
+            "data_filters": data_filters,
+            "visible_pages": visible_pages,
+            "division_id": division_id,
+            "team_id": team_id,
+        },
+        details={"created": created_count, "skipped": skipped_count},
+    )
+
+    return Response({
+        "created": created_count,
+        "skipped": skipped_count,
+        "target": target_name,
+    }, status=status.HTTP_201_CREATED)
+
+
 # ---- Dashboard Clear All ----
 
 @api_view(["DELETE"])

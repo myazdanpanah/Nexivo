@@ -14,6 +14,10 @@ interface Dashboard {
   allowed_roles: string[]
 }
 
+interface OrgCompany { id: number; name: string }
+interface OrgDivision { id: number; name: string; company: number }
+interface OrgTeam { id: number; name: string; division: number }
+
 interface User {
   id: number
   username: string
@@ -79,6 +83,17 @@ export default function DashboardAssignPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [showBulkModal, setShowBulkModal] = useState(false)
+  const [divisions, setDivisions] = useState<OrgDivision[]>([])
+  const [teams, setTeams] = useState<OrgTeam[]>([])
+  const [bulkForm, setBulkForm] = useState({
+    dashboard: 0,
+    target_type: 'team' as 'division' | 'team',
+    division_id: 0,
+    team_id: 0,
+    data_filters: [] as DataFilter[],
+    notes: '',
+  })
 
   // Form state
   const [form, setForm] = useState({
@@ -102,11 +117,16 @@ export default function DashboardAssignPage() {
 
   const fetchData = async () => {
     try {
-      const [assignRes, dashRes, userRes] = await Promise.all([
+      const [assignRes, dashRes, userRes, , divRes, teamRes] = await Promise.all([
         api.get('/dashboards/assignments/'),
         api.get('/dashboards/'),
         api.get('/auth/users/'),
+        api.get('/auth/companies/'),
+        api.get('/auth/divisions/'),
+        api.get('/auth/teams/'),
       ])
+      setDivisions(divRes.data)
+      setTeams(teamRes.data)
       setAssignments(assignRes.data)
       setDashboards(dashRes.data)
       setUsers(userRes.data)
@@ -240,13 +260,22 @@ export default function DashboardAssignPage() {
               </div>
             </div>
           </div>
-          <button
-            onClick={openCreateModal}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition text-sm font-medium"
-          >
-            <UserPlus className="w-4 h-4" />
-            تخصیص جدید
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowBulkModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition text-sm font-medium"
+            >
+              <Users className="w-4 h-4" />
+              تخصیص گروهی
+            </button>
+            <button
+              onClick={openCreateModal}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition text-sm font-medium"
+            >
+              <UserPlus className="w-4 h-4" />
+              تخصیص جدید
+            </button>
+          </div>
         </div>
       </header>
 
@@ -623,6 +652,87 @@ export default function DashboardAssignPage() {
               >
                 <Check className="w-4 h-4" />
                 {editingAssignment ? 'ذخیره تغییرات' : 'ایجاد تخصیص'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Assign Modal */}
+      {showBulkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" dir="rtl">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowBulkModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="font-bold text-gray-900">تخصیص گروهی داشبورد</h3>
+              <button onClick={() => setShowBulkModal(false)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-gray-500">تخصیص یک داشبورد به تمام اعضای یک واحد یا تیم به‌صورت خودکار</p>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">داشبورد *</label>
+                <select value={bulkForm.dashboard || ''} onChange={(e) => setBulkForm({ ...bulkForm, dashboard: Number(e.target.value) })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                  <option value="">انتخاب داشبورد...</option>
+                  {dashboards.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">نوع هدف *</label>
+                <div className="flex gap-2">
+                  <button onClick={() => setBulkForm({ ...bulkForm, target_type: 'team', team_id: 0 })} className={`flex-1 p-3 rounded-xl border-2 text-sm font-medium transition ${bulkForm.target_type === 'team' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}`}>تیم</button>
+                  <button onClick={() => setBulkForm({ ...bulkForm, target_type: 'division', division_id: 0, team_id: 0 })} className={`flex-1 p-3 rounded-xl border-2 text-sm font-medium transition ${bulkForm.target_type === 'division' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}`}>واحد</button>
+                </div>
+              </div>
+              {bulkForm.target_type === 'team' ? (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">تیم *</label>
+                  <select value={bulkForm.team_id || ''} onChange={(e) => setBulkForm({ ...bulkForm, team_id: Number(e.target.value) })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="">انتخاب تیم...</option>
+                    {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">واحد *</label>
+                  <select value={bulkForm.division_id || ''} onChange={(e) => setBulkForm({ ...bulkForm, division_id: Number(e.target.value) })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="">انتخاب واحد...</option>
+                    {divisions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">یادداشت</label>
+                <input type="text" value={bulkForm.notes} onChange={(e) => setBulkForm({ ...bulkForm, notes: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="اختیاری..." />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
+              <button onClick={() => setShowBulkModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition">انصراف</button>
+              <button
+                onClick={async () => {
+                  if (!bulkForm.dashboard || (bulkForm.target_type === 'team' && !bulkForm.team_id) || (bulkForm.target_type === 'division' && !bulkForm.division_id)) {
+                    toast('لطفاً تمام فیلدها را پر کنید', 'error')
+                    return
+                  }
+                  try {
+                    const payload: Record<string, unknown> = {
+                      dashboard: bulkForm.dashboard,
+                      data_filters: bulkForm.data_filters,
+                      notes: bulkForm.notes,
+                    }
+                    if (bulkForm.target_type === 'team') payload.team_id = bulkForm.team_id
+                    else payload.division_id = bulkForm.division_id
+                    const res = await api.post('/dashboards/assignments/bulk/', payload)
+                    toast(`تخصیص گروهی: ${res.data.created} تخصیص جدید، ${res.data.skipped} تکراری`, 'success')
+                    setShowBulkModal(false)
+                    fetchData()
+                  } catch (err: unknown) {
+                    const axiosErr = err as { response?: { data?: { error?: string } } }
+                    toast(axiosErr.response?.data?.error || 'خطا در تخصیص گروهی', 'error')
+                  }
+                }}
+                className="px-6 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 transition font-medium flex items-center gap-2"
+              >
+                <Check className="w-4 h-4" /> اجرای تخصیص گروهی
               </button>
             </div>
           </div>
