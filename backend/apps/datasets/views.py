@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from django.conf import settings
 
 from .models import Dataset, DataFilter
-from apps.dashboards.models import DashboardAssignment
+from apps.dashboards.models import DashboardAssignment, PermissionAuditLog
 from .serializers import DatasetSerializer, DatasetUploadSerializer
 from .parsers import parse_excel_file, generate_table_name, create_table_from_dataframe
 
@@ -243,10 +243,26 @@ def dataset_query(request, pk):
                 assigned_to=request.user,
                 is_active=True,
             )
+            enforced_filters = []
             for assignment in assignments:
                 for f in (assignment.data_filters or []):
                     if f.get("col") in valid_columns:
                         additional_filters.append(f)
+                        enforced_filters.append(f)
+            # Audit log: record when row-level filters are enforced
+            if enforced_filters:
+                PermissionAuditLog.objects.create(
+                    action="filter_access_update",
+                    user=request.user,
+                    target_type="dataset",
+                    target_id=str(pk),
+                    target_name=dataset.name,
+                    details={
+                        "dashboard_id": dashboard_id,
+                        "filters_enforced": enforced_filters,
+                        "filter_count": len(enforced_filters),
+                    },
+                )
 
     # Validate filter column names against dataset schema
     for f in additional_filters:

@@ -3,7 +3,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django.contrib.auth import authenticate, get_user_model
 from .authentication import JWTAuthentication
-from .serializers import LoginSerializer, RegisterSerializer, UserSerializer
+from .serializers import (
+    LoginSerializer, RegisterSerializer, UserSerializer,
+    CompanySerializer, DivisionSerializer, TeamSerializer,
+)
+from .models import Company, Division, Team
 
 User = get_user_model()
 
@@ -123,7 +127,10 @@ def user_detail_view(request, pk):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-        allowed_fields = ["username", "email", "first_name", "last_name", "role", "department"]
+        allowed_fields = [
+            "username", "email", "first_name", "last_name", "role", "department",
+            "company", "division", "team", "reports_to",
+        ]
         for field in allowed_fields:
             if field in request.data:
                 setattr(user, field, request.data[field])
@@ -139,3 +146,186 @@ def user_detail_view(request, pk):
             )
         user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---- Organization Management (Company → Division → Team) ----
+
+@api_view(["GET", "POST"])
+def company_list_create(request):
+    """List all companies or create a new one (admin/CEO only)."""
+    if not _is_admin_or_ceo(request.user):
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == "GET":
+        companies = Company.objects.all()
+        return Response(CompanySerializer(companies, many=True).data)
+    elif request.method == "POST":
+        serializer = CompanySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET", "PUT", "DELETE"])
+def company_detail(request, pk):
+    """Retrieve, update, or delete a company."""
+    if not _is_admin_or_ceo(request.user):
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        company = Company.objects.get(pk=pk)
+    except Company.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "GET":
+        return Response(CompanySerializer(company).data)
+    elif request.method == "PUT":
+        serializer = CompanySerializer(company, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+    elif request.method == "DELETE":
+        company.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["GET", "POST"])
+def division_list_create(request):
+    """List divisions (optionally filtered by company) or create a new one."""
+    if not _is_admin_or_ceo(request.user):
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == "GET":
+        divisions = Division.objects.select_related("company", "manager").all()
+        company_id = request.query_params.get("company_id")
+        if company_id:
+            divisions = divisions.filter(company_id=company_id)
+        return Response(DivisionSerializer(divisions, many=True).data)
+    elif request.method == "POST":
+        serializer = DivisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET", "PUT", "DELETE"])
+def division_detail(request, pk):
+    """Retrieve, update, or delete a division."""
+    if not _is_admin_or_ceo(request.user):
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        division = Division.objects.select_related("company", "manager").get(pk=pk)
+    except Division.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "GET":
+        return Response(DivisionSerializer(division).data)
+    elif request.method == "PUT":
+        serializer = DivisionSerializer(division, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+    elif request.method == "DELETE":
+        division.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["GET", "POST"])
+def team_list_create(request):
+    """List teams (optionally filtered by division) or create a new one."""
+    if not _is_admin_or_ceo(request.user):
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == "GET":
+        teams = Team.objects.select_related("division", "division__company", "manager").all()
+        division_id = request.query_params.get("division_id")
+        company_id = request.query_params.get("company_id")
+        if division_id:
+            teams = teams.filter(division_id=division_id)
+        elif company_id:
+            teams = teams.filter(division__company_id=company_id)
+        return Response(TeamSerializer(teams, many=True).data)
+    elif request.method == "POST":
+        serializer = TeamSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET", "PUT", "DELETE"])
+def team_detail(request, pk):
+    """Retrieve, update, or delete a team."""
+    if not _is_admin_or_ceo(request.user):
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        team = Team.objects.select_related("division", "division__company", "manager").get(pk=pk)
+    except Team.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "GET":
+        return Response(TeamSerializer(team).data)
+    elif request.method == "PUT":
+        serializer = TeamSerializer(team, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+    elif request.method == "DELETE":
+        team.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["GET"])
+def org_tree(request):
+    """Return the full organization tree: Companies → Divisions → Teams with members (admin/CEO only)."""
+    if not _is_admin_or_ceo(request.user):
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+    companies = Company.objects.prefetch_related(
+        'divisions', 'divisions__teams', 'divisions__manager', 'divisions__teams__manager',
+        'employees', 'divisions__employees', 'divisions__teams__members',
+    ).all()
+
+    result = []
+    for company in companies:
+        divs = []
+        for div in company.divisions.all():
+            teams = []
+            for team in div.teams.all():
+                members = [
+                    {"id": m.id, "username": m.username, "name": f"{m.first_name} {m.last_name}".strip() or m.username, "role": m.role}
+                    for m in team.members.all()
+                ]
+                teams.append({
+                    "id": team.id,
+                    "name": team.name,
+                    "description": team.description,
+                    "manager": team.manager.username if team.manager else None,
+                    "manager_name": f"{team.manager.first_name} {team.manager.last_name}".strip() if team.manager else None,
+                    "member_count": len(members),
+                    "members": members,
+                })
+            div_employees = [
+                {"id": e.id, "username": e.username, "name": f"{e.first_name} {e.last_name}".strip() or e.username, "role": e.role}
+                for e in div.employees.all() if not e.team
+            ]
+            divs.append({
+                "id": div.id,
+                "name": div.name,
+                "description": div.description,
+                "manager": div.manager.username if div.manager else None,
+                "manager_name": f"{div.manager.first_name} {div.manager.last_name}".strip() if div.manager else None,
+                "teams": teams,
+                "employees": div_employees,
+            })
+        company_employees = [
+            {"id": e.id, "username": e.username, "name": f"{e.first_name} {e.last_name}".strip() or e.username, "role": e.role}
+            for e in company.employees.all() if not e.division
+        ]
+        result.append({
+            "id": company.id,
+            "name": company.name,
+            "description": company.description,
+            "divisions": divs,
+            "employees": company_employees,
+        })
+
+    return Response(result)

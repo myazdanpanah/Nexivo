@@ -87,6 +87,7 @@ export default function DashboardAssignPage() {
     data_filters: [] as DataFilter[],
     visible_pages: [] as number[],
     notes: '',
+    is_active: true,
   })
 
   const selectedDashboard = dashboards.find((d) => d.id === form.dashboard)
@@ -124,6 +125,7 @@ export default function DashboardAssignPage() {
       data_filters: [],
       visible_pages: [],
       notes: '',
+      is_active: true,
     })
     setShowModal(true)
   }
@@ -136,6 +138,7 @@ export default function DashboardAssignPage() {
       data_filters: assignment.data_filters || [],
       visible_pages: assignment.visible_pages || [],
       notes: assignment.notes || '',
+      is_active: assignment.is_active,
     })
     setShowModal(true)
   }
@@ -153,6 +156,7 @@ export default function DashboardAssignPage() {
         data_filters: form.data_filters,
         visible_pages: form.visible_pages,
         notes: form.notes,
+        is_active: form.is_active,
       }
 
       if (editingAssignment) {
@@ -341,6 +345,11 @@ export default function DashboardAssignPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium ${
+                        assignment.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {assignment.is_active ? 'فعال' : 'غیرفعال'}
+                      </span>
                       {assignment.data_filters?.length > 0 && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium">
                           <Filter className="w-3 h-3" />
@@ -567,6 +576,25 @@ export default function DashboardAssignPage() {
                 ) : (
                   <p className="text-xs text-gray-400 bg-gray-50 px-3 py-2 rounded-lg">بدون فیلتر - تمام داده‌ها قابل مشاهده</p>
                 )}
+              </div>
+
+              {/* Active toggle */}
+              <div className="flex items-center justify-between p-4 rounded-xl border border-gray-200">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">وضعیت تخصیص</p>
+                  <p className="text-xs text-gray-500">غیرفعال کردن این تخصیص بدون حذف آن</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, is_active: !prev.is_active }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                    form.is_active ? 'bg-emerald-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                    form.is_active ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
               </div>
 
               {/* Notes */}

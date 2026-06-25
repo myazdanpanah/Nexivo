@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import api from '../api/client'
 import { useToast } from '../components/Toast'
-import { Plus, BarChart3, Upload, LogOut, ChevronLeft, LayoutTemplate, TrendingUp, DollarSign, Megaphone, Users, ShoppingBag, Trash2, Copy, Share2, Shield, MoreVertical, X, UserCheck } from 'lucide-react'
+import { Plus, BarChart3, Upload, LogOut, ChevronLeft, LayoutTemplate, TrendingUp, DollarSign, Megaphone, Users, ShoppingBag, Trash2, Copy, Share2, Shield, MoreVertical, X, UserCheck, FolderTree } from 'lucide-react'
 import { ALL_ROLES } from '../utils/roles'
 
 interface Dashboard {
@@ -16,6 +16,9 @@ interface Dashboard {
   widgets: unknown[]
   pages?: Array<{ id: number; name: string; widgets: unknown[] }>
   created_at: string
+  assignment_id?: number
+  assigned_by_name?: string
+  assignment_data_filters?: unknown[]
 }
 
 interface Template {
@@ -55,6 +58,7 @@ export default function DashboardListPage() {
   const [activeMenu, setActiveMenu] = useState<number | null>(null)
   const [shareModal, setShareModal] = useState<Dashboard | null>(null)
   const [shareRoles, setShareRoles] = useState<string[]>([])
+  const [assignedDashboards, setAssignedDashboards] = useState<Set<number>>(new Set())
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -63,6 +67,7 @@ export default function DashboardListPage() {
   useEffect(() => {
     fetchDashboards()
     fetchTemplates()
+    fetchAssignedDashboards()
   }, [])
 
   // Close menus on outside click
@@ -92,6 +97,16 @@ export default function DashboardListPage() {
     try {
       const res = await api.get('/dashboards/templates/')
       setTemplates(res.data)
+    } catch {
+      // ignore
+    }
+  }
+
+  const fetchAssignedDashboards = async () => {
+    try {
+      const res = await api.get('/dashboards/my-assigned/')
+      const ids = new Set<number>(res.data.map((d: { id: number }) => d.id))
+      setAssignedDashboards(ids)
     } catch {
       // ignore
     }
@@ -220,6 +235,16 @@ export default function DashboardListPage() {
               <Upload className="w-4 h-4" />
               بارگذاری داده
             </Link>
+
+            {canManage && (
+              <Link
+                to="/admin/org"
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl transition"
+              >
+                <FolderTree className="w-4 h-4" />
+                ساختار سازمانی
+              </Link>
+            )}
 
             {canManage && (
               <Link
@@ -365,6 +390,12 @@ export default function DashboardListPage() {
                 {/* Action buttons */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1 text-xs text-gray-400">
+                    {assignedDashboards.has(d.id) && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded text-[10px] font-medium">
+                        <UserCheck className="w-2.5 h-2.5" />
+                        تخصیص
+                      </span>
+                    )}
                     <span>{d.pages && d.pages.length > 0 ? `${d.pages.length} صفحه` : `${d.widgets?.length || 0} نمودار`}</span>
                     <span className="mx-1">·</span>
                     <span>{d.owner_name}</span>
