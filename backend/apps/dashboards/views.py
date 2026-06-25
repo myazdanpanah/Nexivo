@@ -1071,17 +1071,20 @@ def assignment_bulk_create(request):
         details={"created": created_count, "skipped": skipped_count},
     )
 
-    # Notify each newly assigned user
-    for u in target_users:
-        if DashboardAssignment.objects.filter(dashboard=dashboard, assigned_to=u).exists():
-            _notify(
+    # Notify all target users in bulk
+    if created_count > 0:
+        notified_users = list(target_users)
+        Notification.objects.bulk_create([
+            Notification(
                 recipient=u,
                 notification_type="assignment_new",
-                title=f"داشبورد جدید تخصیص یافت",
+                title="داشبورد جدید تخصیص یافت",
                 message=f"داشبورد «{dashboard.name}» از طریق تیم «{target_name}» به شما تخصیص داده شد.",
                 target_type="dashboard",
                 target_id=str(dashboard.pk),
             )
+            for u in notified_users
+        ])
 
     return Response({
         "created": created_count,
