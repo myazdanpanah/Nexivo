@@ -14,7 +14,6 @@ interface Dashboard {
   allowed_roles: string[]
 }
 
-interface OrgCompany { id: number; name: string }
 interface OrgDivision { id: number; name: string; company: number }
 interface OrgTeam { id: number; name: string; division: number }
 
