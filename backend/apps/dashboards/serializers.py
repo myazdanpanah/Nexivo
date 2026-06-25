@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Dashboard, DashboardPage, Widget
+from .models import Dashboard, DashboardPage, Widget, DashboardAssignment
 
 
 class WidgetSerializer(serializers.ModelSerializer):
@@ -81,4 +81,37 @@ class WidgetCreateSerializer(serializers.ModelSerializer):
             "title", "chart_type", "dataset", "page",
             "chart_config", "query_config",
             "grid_x", "grid_y", "grid_w", "grid_h", "order",
+        ]
+
+
+class DashboardAssignmentSerializer(serializers.ModelSerializer):
+    dashboard_name = serializers.CharField(source="dashboard.name", read_only=True)
+    assigned_to_username = serializers.CharField(source="assigned_to.username", read_only=True)
+    assigned_to_name = serializers.SerializerMethodField()
+    assigned_by_username = serializers.CharField(source="assigned_by.username", read_only=True, default=None)
+
+    class Meta:
+        model = DashboardAssignment
+        fields = [
+            "id", "dashboard", "dashboard_name",
+            "assigned_to", "assigned_to_username", "assigned_to_name",
+            "assigned_by", "assigned_by_username",
+            "data_filters", "visible_pages", "visible_filter_controls",
+            "notes", "is_active",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "assigned_by", "created_at", "updated_at"]
+
+    def get_assigned_to_name(self, obj):
+        user = obj.assigned_to
+        return f"{user.first_name} {user.last_name}".strip() or user.username
+
+
+class DashboardAssignmentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DashboardAssignment
+        fields = [
+            "dashboard", "assigned_to",
+            "data_filters", "visible_pages", "visible_filter_controls",
+            "notes", "is_active",
         ]

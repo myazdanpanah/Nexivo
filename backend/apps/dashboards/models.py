@@ -160,6 +160,73 @@ class Widget(models.Model):
         return f"{self.title} ({self.chart_type})"
 
 
+class DashboardAssignment(models.Model):
+    """
+    Assigns a dashboard (and optionally specific pages + data filters) to a user.
+    Managers/CEO/admin can create these to control which employees see which
+    dashboards, which pages, and which rows of data.
+    """
+
+    dashboard = models.ForeignKey(
+        Dashboard,
+        on_delete=models.CASCADE,
+        related_name="assignments",
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="dashboard_assignments",
+        help_text="User who gets access",
+    )
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="dashboard_assignments_made",
+        help_text="Manager who made the assignment",
+    )
+
+    # Row-level data filters applied when the assigned user queries data
+    # Format: [{"col": "region", "op": "eq", "val": "Tehran"}, ...]
+    data_filters = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Row-level filters enforced for this user on this dashboard',
+    )
+
+    # Which pages the assigned user can see (empty = all pages)
+    visible_pages = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of page IDs the user can access (empty = all)',
+    )
+
+    # Which filter controls the user can use (empty = all)
+    visible_filter_controls = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Filter control IDs the user can use (empty = all)',
+    )
+
+    notes = models.TextField(
+        blank=True,
+        default="",
+        help_text="Manager notes about this assignment",
+    )
+
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ["dashboard", "assigned_to"]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.dashboard.name} → {self.assigned_to.username}"
+
+
 class PermissionAuditLog(models.Model):
     """
     Tracks permission-related changes on dashboards, pages, and filters.

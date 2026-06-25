@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import api from '../api/client'
 import { useToast } from '../components/Toast'
-import { Plus, BarChart3, Upload, LogOut, ChevronLeft, LayoutTemplate, TrendingUp, DollarSign, Megaphone, Users, ShoppingBag, Trash2, Copy, Share2, Shield, MoreVertical, X } from 'lucide-react'
+import { Plus, BarChart3, Upload, LogOut, ChevronLeft, LayoutTemplate, TrendingUp, DollarSign, Megaphone, Users, ShoppingBag, Trash2, Copy, Share2, Shield, MoreVertical, X, UserCheck } from 'lucide-react'
 import { ALL_ROLES } from '../utils/roles'
 
 interface Dashboard {
@@ -220,6 +220,16 @@ export default function DashboardListPage() {
               <Upload className="w-4 h-4" />
               بارگذاری داده
             </Link>
+
+            {canManage && (
+              <Link
+                to="/admin/assignments"
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl transition"
+              >
+                <UserCheck className="w-4 h-4" />
+                تخصیص داشبورد
+              </Link>
+            )}
 
             {canManage && (
               <Link

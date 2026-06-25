@@ -1,9 +1,10 @@
 import logging
 
+from django.db import models
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import Dashboard, DashboardPage, Widget, PermissionAuditLog
+from .models import Dashboard, DashboardPage, Widget, PermissionAuditLog, DashboardAssignment
 from .serializers import (
     DashboardSerializer,
     DashboardCreateSerializer,
@@ -12,6 +13,8 @@ from .serializers import (
     DashboardPageSerializer,
     DashboardPageCreateSerializer,
     DashboardPageExportSerializer,
+    DashboardAssignmentSerializer,
+    DashboardAssignmentCreateSerializer,
 )
 
 
@@ -210,13 +213,26 @@ def dashboard_create_from_template(request):
 def dashboard_list(request):
     """List dashboards or create a new one."""
     if request.method == "GET":
-        dashboards = Dashboard.objects.filter(is_published=True)
-
-        # Role-based filtering
         if request.user.role == "ceo" or request.user.is_staff:
-            pass  # CEO sees everything
+            # CEO/admin sees all published dashboards
+            dashboards = Dashboard.objects.filter(is_published=True)
+        elif request.user.role in ("admin",):
+            dashboards = Dashboard.objects.filter(is_published=True)
         else:
-            dashboards = dashboards.filter(allowed_roles__contains=request.user.role)
+            # Non-admin: role-based + explicitly assigned dashboards
+            role_dashboards = Dashboard.objects.filter(
+                is_published=True, allowed_roles__contains=request.user.role
+            )
+            assigned_ids = DashboardAssignment.objects.filter(
+                assigned_to=request.user, is_active=True
+            ).values_list("dashboard_id", flat=True)
+            assigned_dashboards = Dashboard.objects.filter(
+                id__in=assigned_ids, is_published=True
+            )
+            from django.db.models import Q
+            dashboards = Dashboard.objects.filter(
+                Q(id__in=role_dashboards) | Q(id__in=assigned_dashboards)
+            ).distinct()
 
         serializer = DashboardSerializer(dashboards, many=True)
         return Response(serializer.data)
@@ -765,6 +781,174 @@ def audit_log_list(request):
             "created_at": log.created_at.isoformat() if log.created_at else None,
         })
     return Response(data)
+
+
+# ---- Dashboard Assignments ----
+
+@api_view(["GET", "POST"])
+def assignment_list_create(request):
+    """List assignments (for a dashboard or all for admin) or create a new one."""
+    if request.user.role not in ("admin", "ceo") and not request.user.is_staff:
+        # Managers can see/assign dashboards they own
+        pass
+
+    if request.method == "GET":
+        dashboard_id = request.query_params.get("dashboard_id")
+        user_id = request.query_params.get("user_id")
+
+        assignments = DashboardAssignment.objects.select_related(
+            "dashboard", "assigned_to", "assigned_by"
+        ).all()
+
+        # Non-admin users only see their own assignments
+        if request.user.role not in ("admin", "ceo") and not request.user.is_staff:
+            assignments = assignments.filter(
+                models.Q(assigned_to=request.user) | models.Q(assigned_by=request.user)
+            )
+
+        if dashboard_id:
+            assignments = assignments.filter(dashboard_id=dashboard_id)
+        if user_id:
+            assignments = assignments.filter(assigned_to_id=user_id)
+
+        serializer = DashboardAssignmentSerializer(assignments, many=True)
+        return Response(serializer.data)
+
+    elif request.method == "POST":
+        # Only admin, CEO, or dashboard owner can create assignments
+        data = request.data.copy()
+        dashboard_id = data.get("dashboard")
+        try:
+            dashboard = Dashboard.objects.get(pk=dashboard_id)
+        except Dashboard.DoesNotExist:
+            return Response({"error": "Dashboard not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.user.role not in ("admin", "ceo") and not request.user.is_staff:
+            if dashboard.owner != request.user:
+                return Response(
+                    {"error": "Only the dashboard owner or admin can create assignments"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        data["assigned_by"] = request.user.id
+        serializer = DashboardAssignmentCreateSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        assignment = serializer.save(assigned_by=request.user)
+
+        # Audit log
+        PermissionAuditLog.objects.create(
+            action="dashboard_share",
+            user=request.user,
+            target_type="assignment",
+            target_id=str(assignment.pk),
+            target_name=f"{dashboard.name} → {assignment.assigned_to.username}",
+            new_value={
+                "data_filters": assignment.data_filters,
+                "visible_pages": assignment.visible_pages,
+            },
+        )
+
+        return Response(
+            DashboardAssignmentSerializer(assignment).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+@api_view(["GET", "PUT", "DELETE"])
+def assignment_detail(request, pk):
+    """Retrieve, update, or delete an assignment."""
+    try:
+        assignment = DashboardAssignment.objects.select_related(
+            "dashboard", "assigned_to", "assigned_by"
+        ).get(pk=pk)
+    except DashboardAssignment.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    # Permission check
+    if request.user.role not in ("admin", "ceo") and not request.user.is_staff:
+        if assignment.assigned_by != request.user and assignment.assigned_to != request.user:
+            return Response(
+                {"error": "Permission denied"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+    if request.method == "GET":
+        return Response(DashboardAssignmentSerializer(assignment).data)
+
+    elif request.method == "PUT":
+        if request.user.role not in ("admin", "ceo") and not request.user.is_staff:
+            if assignment.assigned_by != request.user:
+                return Response(
+                    {"error": "Only the assigner can modify this assignment"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        old_filters = list(assignment.data_filters)
+        old_pages = list(assignment.visible_pages)
+
+        serializer = DashboardAssignmentCreateSerializer(
+            assignment, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        assignment = serializer.save()
+
+        # Audit log if filters changed
+        if assignment.data_filters != old_filters or assignment.visible_pages != old_pages:
+            PermissionAuditLog.objects.create(
+                action="filter_access_update",
+                user=request.user,
+                target_type="assignment",
+                target_id=str(assignment.pk),
+                target_name=f"{assignment.dashboard.name} → {assignment.assigned_to.username}",
+                old_value={"data_filters": old_filters, "visible_pages": old_pages},
+                new_value={
+                    "data_filters": assignment.data_filters,
+                    "visible_pages": assignment.visible_pages,
+                },
+            )
+
+        return Response(DashboardAssignmentSerializer(assignment).data)
+
+    elif request.method == "DELETE":
+        if request.user.role not in ("admin", "ceo") and not request.user.is_staff:
+            if assignment.assigned_by != request.user:
+                return Response(
+                    {"error": "Only the assigner can delete this assignment"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        assignment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["GET"])
+def my_assigned_dashboards(request):
+    """List dashboards assigned to the current user."""
+    assignments = DashboardAssignment.objects.select_related(
+        "dashboard", "assigned_to", "assigned_by"
+    ).filter(
+        assigned_to=request.user,
+        is_active=True,
+    )
+
+    result = []
+    for assignment in assignments:
+        dashboard = assignment.dashboard
+        if not dashboard.is_published:
+            continue
+
+        # Build per-user data from assignment
+        entry = DashboardSerializer(dashboard).data
+        entry["assignment_id"] = assignment.pk
+        entry["assignment_data_filters"] = assignment.data_filters
+        entry["assignment_visible_pages"] = assignment.visible_pages
+        entry["assignment_visible_filter_controls"] = assignment.visible_filter_controls
+        entry["assigned_by_name"] = (
+            assignment.assigned_by.username if assignment.assigned_by else None
+        )
+        entry["assignment_notes"] = assignment.notes
+        result.append(entry)
+
+    return Response(result)
 
 
 # ---- Dashboard Clear All ----

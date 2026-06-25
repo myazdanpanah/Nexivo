@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from django.conf import settings
 
 from .models import Dataset, DataFilter
+from apps.dashboards.models import DashboardAssignment
 from .serializers import DatasetSerializer, DatasetUploadSerializer
 from .parsers import parse_excel_file, generate_table_name, create_table_from_dataframe
 
@@ -224,6 +225,21 @@ def dataset_query(request, pk):
             "op": rf.operator,
             "val": rf.value,
         })
+
+    # Enforce row-level data_filters from dashboard assignments
+    # The frontend sends dashboardId in the request; we look up any active
+    # assignments for this user on that dashboard and apply their data_filters.
+    dashboard_id = request.data.get("dashboardId")
+    if dashboard_id:
+        assignments = DashboardAssignment.objects.filter(
+            dashboard_id=dashboard_id,
+            assigned_to=request.user,
+            is_active=True,
+        )
+        for assignment in assignments:
+            for f in (assignment.data_filters or []):
+                if f.get("col") in valid_columns:
+                    additional_filters.append(f)
 
     # Validate filter column names against dataset schema
     for f in additional_filters:
