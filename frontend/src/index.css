@@ -30,6 +30,13 @@ body {
 }
 
 /* Grid layout styles */
+/* Force LTR inside the grid container so react-grid-layout positions items correctly,
+   then flip the whole thing back to RTL with transform */
+.react-grid-layout-wrapper {
+  direction: ltr;
+  text-align: left;
+}
+
 .react-grid-layout {
   position: relative;
   transition: height 200ms ease;

@@ -294,96 +294,98 @@ export default function DashboardBuilderPage() {
             </button>
           </div>
         ) : (
-          <ResponsiveGridLayout
-            className="layout"
-            layouts={{ lg: currentPageLayout, md: currentPageLayout, sm: currentPageLayout }}
-            breakpoints={{ lg: 1200, md: 996, sm: 768 }}
-            cols={{ lg: 12, md: 9, sm: 6 }}
-            rowHeight={60}
-            onLayoutChange={handleLayoutChange}
-            isDraggable
-            isResizable
-            useCSSTransforms
-            compactType="vertical"
-            draggableHandle={isMobile ? '.drag-handle' : undefined}
-          >
-            {currentPageWidgets.map((w) => {
-              const ws = (w.chartConfig as Record<string, unknown>)?.widgetStyle as { shadow?: string; borderRadius?: number } | undefined
-              const shadow = ws?.shadow === 'none' ? '' : ws?.shadow === 'md' ? 'shadow-md' : ws?.shadow === 'lg' ? 'shadow-lg' : 'shadow-sm'
-              const radius = ws?.borderRadius ?? 16
-              return (
-                <div key={w.id} className="group">
-                  <div className={`bg-white border border-gray-200 h-full overflow-hidden ${shadow} hover:shadow-md transition`} style={{ borderRadius: radius }}>
-                    <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
-                      <span className="text-sm font-medium text-gray-700 truncate">
-                        {w.title}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        {!isMobile ? (
-                          <>
-                            <button
-                              onClick={() => {
-                                setEditingWidget(w.id)
-                                setShowConfig(true)
-                              }}
-                              className="p-1 text-gray-400 hover:text-indigo-500 transition opacity-0 group-hover:opacity-100"
-                            >
-                              <Settings className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => deleteWidget(w.id)}
-                              className="p-1 text-gray-400 hover:text-red-500 transition opacity-0 group-hover:opacity-100"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <div className="drag-handle p-1 text-gray-400 cursor-grab active:cursor-grabbing">
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
-                            </div>
-                            <button
-                              onClick={() => setMobileSettingsWidget(w.id)}
-                              className="p-1 text-gray-500 active:text-indigo-600"
-                            >
-                              <Settings className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => deleteWidget(w.id)}
-                              className="p-1 text-gray-500 active:text-red-500"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
+          <div className="react-grid-layout-wrapper">
+            <ResponsiveGridLayout
+              className="layout"
+              layouts={{ lg: currentPageLayout, md: currentPageLayout, sm: currentPageLayout }}
+              breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+              cols={{ lg: 12, md: 9, sm: 6 }}
+              rowHeight={60}
+              onLayoutChange={handleLayoutChange}
+              isDraggable
+              isResizable
+              useCSSTransforms
+              compactType="vertical"
+              draggableHandle={isMobile ? '.drag-handle' : undefined}
+            >
+              {currentPageWidgets.map((w) => {
+                const ws = (w.chartConfig as Record<string, unknown>)?.widgetStyle as { shadow?: string; borderRadius?: number } | undefined
+                const shadow = ws?.shadow === 'none' ? '' : ws?.shadow === 'md' ? 'shadow-md' : ws?.shadow === 'lg' ? 'shadow-lg' : 'shadow-sm'
+                const radius = ws?.borderRadius ?? 16
+                return (
+                  <div key={w.id} className="group" style={{ direction: 'rtl', textAlign: 'right' }}>
+                    <div className={`bg-white border border-gray-200 h-full overflow-hidden ${shadow} hover:shadow-md transition`} style={{ borderRadius: radius }}>
+                      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+                        <span className="text-sm font-medium text-gray-700 truncate">
+                          {w.title}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {!isMobile ? (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setEditingWidget(w.id)
+                                  setShowConfig(true)
+                                }}
+                                className="p-1 text-gray-400 hover:text-indigo-500 transition opacity-0 group-hover:opacity-100"
+                              >
+                                <Settings className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => deleteWidget(w.id)}
+                                className="p-1 text-gray-400 hover:text-red-500 transition opacity-0 group-hover:opacity-100"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <div className="drag-handle p-1 text-gray-400 cursor-grab active:cursor-grabbing">
+                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+                              </div>
+                              <button
+                                onClick={() => setMobileSettingsWidget(w.id)}
+                                className="p-1 text-gray-500 active:text-indigo-600"
+                              >
+                                <Settings className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => deleteWidget(w.id)}
+                                className="p-1 text-gray-500 active:text-red-500"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="p-2" style={{ height: 'calc(100% - 40px)' }}>
+                        <ChartWidget
+                          widget={w}
+                          dashboardFilters={filters}
+                          dashboardControlFilters={controlFilters}
+                          onFilter={setFilter}
+                          drillBreadcrumb={drillState[w.id] || []}
+                          onDrillDown={(col, value) => {
+                            setDrillState((prev) => ({
+                              ...prev,
+                              [w.id]: [...(prev[w.id] || []), { col, value }],
+                            }))
+                          }}
+                          onDrillUp={(index) => {
+                            setDrillState((prev) => ({
+                              ...prev,
+                              [w.id]: (prev[w.id] || []).slice(0, index + 1),
+                            }))
+                          }}
+                        />
                       </div>
                     </div>
-                    <div className="p-2" style={{ height: 'calc(100% - 40px)' }}>
-                      <ChartWidget
-                        widget={w}
-                        dashboardFilters={filters}
-                        dashboardControlFilters={controlFilters}
-                        onFilter={setFilter}
-                        drillBreadcrumb={drillState[w.id] || []}
-                        onDrillDown={(col, value) => {
-                          setDrillState((prev) => ({
-                            ...prev,
-                            [w.id]: [...(prev[w.id] || []), { col, value }],
-                          }))
-                        }}
-                        onDrillUp={(index) => {
-                          setDrillState((prev) => ({
-                            ...prev,
-                            [w.id]: (prev[w.id] || []).slice(0, index + 1),
-                          }))
-                        }}
-                      />
-                    </div>
                   </div>
-                </div>
-              )
-            })}
-          </ResponsiveGridLayout>
+                )
+              })}
+            </ResponsiveGridLayout>
+          </div>
         )}
       </main>
 
