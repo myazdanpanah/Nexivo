@@ -4,7 +4,7 @@ from django.db import models
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import Dashboard, DashboardPage, Widget, PermissionAuditLog, DashboardAssignment
+from .models import Dashboard, DashboardPage, Widget, PermissionAuditLog, DashboardAssignment, Notification
 from .serializers import (
     DashboardSerializer,
     DashboardCreateSerializer,
@@ -845,6 +845,16 @@ def assignment_list_create(request):
             },
         )
 
+        # Send notification to the assigned user
+        _notify(
+            recipient=assignment.assigned_to,
+            notification_type="assignment_new",
+            title=f"داشبورد جدید تخصیص یافت",
+            message=f"داشبورد «{dashboard.name}» توسط {request.user.username} به شما تخصیص داده شد.",
+            target_type="dashboard",
+            target_id=str(dashboard.pk),
+        )
+
         return Response(
             DashboardAssignmentSerializer(assignment).data,
             status=status.HTTP_201_CREATED,
@@ -903,6 +913,16 @@ def assignment_detail(request, pk):
                     "visible_pages": assignment.visible_pages,
                 },
             )
+
+        # Send notification on update
+        _notify(
+            recipient=assignment.assigned_to,
+            notification_type="assignment_updated",
+            title="تخصیص به‌روزرسانی شد",
+            message=f"تخصیص داشبورد «{assignment.dashboard.name}» توسط {request.user.username} به‌روز شد.",
+            target_type="dashboard",
+            target_id=str(assignment.dashboard.pk),
+        )
 
         return Response(DashboardAssignmentSerializer(assignment).data)
 
@@ -1051,6 +1071,18 @@ def assignment_bulk_create(request):
         details={"created": created_count, "skipped": skipped_count},
     )
 
+    # Notify each newly assigned user
+    for u in target_users:
+        if DashboardAssignment.objects.filter(dashboard=dashboard, assigned_to=u).exists():
+            _notify(
+                recipient=u,
+                notification_type="assignment_new",
+                title=f"داشبورد جدید تخصیص یافت",
+                message=f"داشبورد «{dashboard.name}» از طریق تیم «{target_name}» به شما تخصیص داده شد.",
+                target_type="dashboard",
+                target_id=str(dashboard.pk),
+            )
+
     return Response({
         "created": created_count,
         "skipped": skipped_count,
@@ -1091,3 +1123,56 @@ def dashboard_clear_all(request):
             "widgets": widget_count,
         }
     })
+
+
+# ---- Notifications ----
+
+def _notify(recipient, notification_type, title, message="", target_type="", target_id=""):
+    """Helper to create a notification for a user."""
+    Notification.objects.create(
+        recipient=recipient,
+        notification_type=notification_type,
+        title=title,
+        message=message,
+        target_type=target_type,
+        target_id=target_id,
+    )
+
+
+@api_view(["GET"])
+def notification_list(request):
+    """List notifications for the current user."""
+    notifications = Notification.objects.filter(recipient=request.user)[:50]
+    unread_count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+    data = []
+    for n in notifications:
+        data.append({
+            "id": n.id,
+            "type": n.notification_type,
+            "title": n.title,
+            "message": n.message,
+            "target_type": n.target_type,
+            "target_id": n.target_id,
+            "is_read": n.is_read,
+            "created_at": n.created_at.isoformat(),
+        })
+    return Response({"notifications": data, "unread_count": unread_count})
+
+
+@api_view(["POST"])
+def notification_mark_read(request, pk):
+    """Mark a single notification as read."""
+    try:
+        notification = Notification.objects.get(pk=pk, recipient=request.user)
+    except Notification.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    notification.is_read = True
+    notification.save(update_fields=["is_read"])
+    return Response({"ok": True})
+
+
+@api_view(["POST"])
+def notification_mark_all_read(request):
+    """Mark all notifications as read for the current user."""
+    updated = Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
+    return Response({"updated": updated})

@@ -701,6 +701,25 @@ export default function DashboardAssignPage() {
               )}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">یادداشت</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-gray-700">فیلترهای ردیف داده</label>
+                  <button onClick={() => setBulkForm({ ...bulkForm, data_filters: [...bulkForm.data_filters, { col: '', op: 'eq', val: '' }] })} className="text-xs text-blue-600 hover:text-blue-700 font-medium">+ افزودن فیلتر</button>
+                </div>
+                {bulkForm.data_filters.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {bulkForm.data_filters.map((f, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <input type="text" value={f.col} onChange={(e) => { const nf = [...bulkForm.data_filters]; nf[idx] = { ...nf[idx], col: e.target.value }; setBulkForm({ ...bulkForm, data_filters: nf }) }} placeholder="ستون" className="flex-1 px-3 py-2 rounded-lg border border-gray-300 text-sm outline-none" />
+                        <select value={f.op} onChange={(e) => { const nf = [...bulkForm.data_filters]; nf[idx] = { ...nf[idx], op: e.target.value }; setBulkForm({ ...bulkForm, data_filters: nf }) }} className="px-2 py-2 rounded-lg border border-gray-300 text-sm outline-none">
+                          {FILTER_OPERATORS.map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
+                        </select>
+                        <input type="text" value={f.val} onChange={(e) => { const nf = [...bulkForm.data_filters]; nf[idx] = { ...nf[idx], val: e.target.value }; setBulkForm({ ...bulkForm, data_filters: nf }) }} placeholder="مقدار" className="flex-1 px-3 py-2 rounded-lg border border-gray-300 text-sm outline-none" />
+                        <button onClick={() => setBulkForm({ ...bulkForm, data_filters: bulkForm.data_filters.filter((_, i) => i !== idx) })} className="p-2 text-gray-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label className="block text-xs font-medium text-gray-700 mb-1">یادداشت</label>
                 <input type="text" value={bulkForm.notes} onChange={(e) => setBulkForm({ ...bulkForm, notes: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="اختیاری..." />
               </div>
             </div>

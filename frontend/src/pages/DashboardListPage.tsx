@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import api from '../api/client'
 import { useToast } from '../components/Toast'
-import { Plus, BarChart3, Upload, LogOut, ChevronLeft, LayoutTemplate, TrendingUp, DollarSign, Megaphone, Users, ShoppingBag, Trash2, Copy, Share2, Shield, MoreVertical, X, UserCheck, FolderTree } from 'lucide-react'
+import { Plus, BarChart3, Upload, LogOut, ChevronLeft, LayoutTemplate, TrendingUp, DollarSign, Megaphone, Users, ShoppingBag, Trash2, Copy, Share2, Shield, MoreVertical, X, UserCheck, FolderTree, Network } from 'lucide-react'
+import NotificationBell from '../components/NotificationBell'
 import { ALL_ROLES } from '../utils/roles'
 
 interface Dashboard {
@@ -228,12 +229,22 @@ export default function DashboardListPage() {
           </div>
 
           <div className="flex items-center gap-4">
+            <NotificationBell />
+
             <Link
               to="/data/upload"
               className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-xl transition"
             >
               <Upload className="w-4 h-4" />
               بارگذاری داده
+            </Link>
+
+            <Link
+              to="/org-chart"
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl transition"
+            >
+              <Network className="w-4 h-4" />
+              نمودار سازمانی
             </Link>
 
             {canManage && (

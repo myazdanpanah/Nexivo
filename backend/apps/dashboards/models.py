@@ -287,3 +287,36 @@ class PermissionAuditLog(models.Model):
 
     def __str__(self):
         return f"{self.action} by {self.user} on {self.target_type}:{self.target_id}"
+
+
+class Notification(models.Model):
+    """
+    In-app notification for assignment alerts, system events, etc.
+    """
+
+    TYPE_CHOICES = [
+        ("assignment_new", "New Assignment"),
+        ("assignment_updated", "Assignment Updated"),
+        ("assignment_removed", "Assignment Removed"),
+        ("system", "System Message"),
+    ]
+
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+    )
+    notification_type = models.CharField(max_length=50, choices=TYPE_CHOICES)
+    title = models.CharField(max_length=255)
+    message = models.TextField(blank=True, default="")
+    # Link to the relevant object
+    target_type = models.CharField(max_length=50, blank=True, default="")  # dashboard, assignment, etc.
+    target_id = models.CharField(max_length=100, blank=True, default="")
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.notification_type}: {self.title} → {self.recipient.username}"
