@@ -251,12 +251,12 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50" dir="rtl">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900" dir="rtl">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link to="/dashboards" className="p-2 text-gray-400 hover:text-gray-600 transition">
+            <Link to="/dashboards" className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
               <ArrowRight className="w-5 h-5" />
             </Link>
             <div className="flex items-center gap-3">
@@ -264,8 +264,8 @@ export default function AdminSettingsPage() {
                 <Shield className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-gray-900">مدیریت کاربران</h1>
-                <p className="text-xs text-gray-500">ایجاد، ویرایش و حذف نقش‌ها و دسترسی‌ها</p>
+                <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">مدیریت کاربران</h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400">ایجاد، ویرایش و حذف نقش‌ها و دسترسی‌ها</p>
               </div>
             </div>
           </div>
@@ -285,14 +285,14 @@ export default function AdminSettingsPage() {
           {ROLE_OPTIONS.map((r) => {
             const count = users.filter((u) => u.role === r.value).length
             return (
-              <div key={r.value} className="bg-white rounded-2xl border border-gray-200 p-4">
+              <div key={r.value} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${r.color}`}>
                     <Users className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-gray-900">{count}</p>
-                    <p className="text-xs text-gray-500">{r.label}</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{count}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{r.label}</p>
                   </div>
                 </div>
               </div>
@@ -302,10 +302,10 @@ export default function AdminSettingsPage() {
 
         {/* Danger Zone */}
         {user?.isStaff && (
-          <div className="mb-8 bg-white rounded-2xl border-2 border-red-200 overflow-hidden">
+          <div className="mb-8 bg-white dark:bg-gray-800 rounded-2xl border-2 border-red-200 dark:border-red-800 overflow-hidden">
             <div className="px-6 py-4 border-b border-red-100 flex items-center justify-between">
               <div>
-                <h2 className="font-bold text-red-700">منطقه خطر</h2>
+                <h2 className="font-bold text-red-700 dark:text-red-400">منطقه خطر</h2>
                 <p className="text-xs text-red-400">حذف تمام داشبوردها، صفحات و نمودارها</p>
               </div>
               <button
@@ -322,19 +322,19 @@ export default function AdminSettingsPage() {
 
         {/* Tabs */}
         <div className="flex items-center gap-1 mb-6">
-          <button onClick={() => setActiveTab('users')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${activeTab === 'users' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100'}`}>
+          <button onClick={() => setActiveTab('users')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${activeTab === 'users' ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
             <Users className="w-4 h-4" /> کاربران
           </button>
-          <button onClick={() => setActiveTab('audit')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${activeTab === 'audit' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100'}`}>
+          <button onClick={() => setActiveTab('audit')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${activeTab === 'audit' ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
             <History className="w-4 h-4" /> تاریخچه تغییرات
           </button>
         </div>
 
         {/* Users Table */}
         {activeTab === 'users' && (
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="font-bold text-gray-900">لیست کاربران ({users.length})</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+              <h2 className="font-bold text-gray-900 dark:text-gray-100">لیست کاربران ({users.length})</h2>
             </div>
             {loading ? (
               <div className="p-12 text-center text-gray-500">در حال بارگذاری...</div>
@@ -347,7 +347,7 @@ export default function AdminSettingsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="text-right text-xs text-gray-500 border-b border-gray-100">
+                    <tr className="text-right text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
                       <th className="px-6 py-3 font-medium">کاربر</th>
                       <th className="px-6 py-3 font-medium">ایمیل</th>
                       <th className="px-6 py-3 font-medium">نقش</th>
@@ -359,16 +359,16 @@ export default function AdminSettingsPage() {
                     {users.map((u) => {
                       const roleInfo = ROLE_MAP[u.role] || ROLE_OPTIONS[3]
                       return (
-                        <tr key={u.id} className="hover:bg-gray-50 transition">
+                        <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
                           <td className="px-6 py-4">
                             <div>
-                              <p className="text-sm font-medium text-gray-900">
+                              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                                 {u.first_name || u.last_name ? `${u.first_name} ${u.last_name}` : u.username}
                               </p>
                               <p className="text-xs text-gray-400">@{u.username}</p>
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{u.email}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{u.email}</td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex px-2.5 py-0.5 rounded-lg text-xs font-medium ${roleInfo.color}`}>{roleInfo.label}</span>
                           </td>
@@ -401,9 +401,9 @@ export default function AdminSettingsPage() {
 
         {/* Audit Log */}
         {activeTab === 'audit' && (
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="font-bold text-gray-900">تاریخچه تغییرات دسترسی ({auditLogs.length})</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+              <h2 className="font-bold text-gray-900 dark:text-gray-100">تاریخچه تغییرات دسترسی ({auditLogs.length})</h2>
             </div>
             {auditLoading ? (
               <div className="p-12 text-center text-gray-500">در حال بارگذاری...</div>
@@ -415,14 +415,14 @@ export default function AdminSettingsPage() {
             ) : (
               <div className="divide-y divide-gray-50">
                 {auditLogs.map((log) => (
-                  <div key={log.id} className="px-6 py-4 hover:bg-gray-50 transition">
+                  <div key={log.id} className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <span className={`inline-flex px-2.5 py-0.5 rounded-lg text-xs font-medium ${ACTION_COLORS[log.action] || 'bg-gray-100 text-gray-700'}`}>
                           {ACTION_LABELS[log.action] || log.action_display}
                         </span>
                         <div>
-                          <p className="text-sm text-gray-900">
+                          <p className="text-sm text-gray-900 dark:text-gray-100">
                             <span className="font-medium">{log.target_type}</span>
                             {' '}«{log.target_name || log.target_id}»
                           </p>
@@ -440,19 +440,19 @@ export default function AdminSettingsPage() {
                         {Object.keys(log.old_value).length > 0 && (
                           <div>
                             <span className="text-[10px] text-gray-400 uppercase tracking-wide">قبل:</span>
-                            <pre className="text-xs text-red-600 bg-red-50 rounded-lg p-2 mt-1 overflow-x-auto">{JSON.stringify(log.old_value, null, 2)}</pre>
+                            <pre className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg p-2 mt-1 overflow-x-auto">{JSON.stringify(log.old_value, null, 2)}</pre>
                           </div>
                         )}
                         {Object.keys(log.new_value).length > 0 && (
                           <div>
                             <span className="text-[10px] text-gray-400 uppercase tracking-wide">بعد:</span>
-                            <pre className="text-xs text-green-600 bg-green-50 rounded-lg p-2 mt-1 overflow-x-auto">{JSON.stringify(log.new_value, null, 2)}</pre>
+                            <pre className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg p-2 mt-1 overflow-x-auto">{JSON.stringify(log.new_value, null, 2)}</pre>
                           </div>
                         )}
                         {Object.keys(log.details).length > 0 && (
                           <div>
                             <span className="text-[10px] text-gray-400 uppercase tracking-wide">جزئیات:</span>
-                            <pre className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2 mt-1 overflow-x-auto">{JSON.stringify(log.details, null, 2)}</pre>
+                            <pre className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 mt-1 overflow-x-auto">{JSON.stringify(log.details, null, 2)}</pre>
                           </div>
                         )}
                       </div>
@@ -469,39 +469,38 @@ export default function AdminSettingsPage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" dir="rtl">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
-              <h3 className="font-bold text-gray-900">{editingUser ? 'ویرایش کاربر' : 'کاربر جدید'}</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+          <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
+              <h3 className="font-bold text-gray-900 dark:text-gray-100">{editingUser ? 'ویرایش کاربر' : 'کاربر جدید'}</h3>
+              <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">نام</label>
-                  <input type="text" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">نام</label>
+                  <input type="text" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">نام خانوادگی</label>
-                  <input type="text" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">نام خانوادگی</label>
+                  <input type="text" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">نام کاربری *</label>
-                <input type="text" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" disabled={!!editingUser} />
+              <div>                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">نام کاربری *</label>
+                  <input type="text" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" disabled={!!editingUser} />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">ایمیل *</label>
-                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">ایمیل *</label>
+                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">نقش *</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">نقش *</label>
                 <div className="grid grid-cols-2 gap-2">
                   {ROLE_OPTIONS.map((r) => (
-                    <button key={r.value} type="button" onClick={() => setForm({ ...form, role: r.value })} className={`p-3 rounded-xl border-2 text-sm font-medium transition ${form.role === r.value ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    <button key={r.value} type="button" onClick={() => setForm({ ...form, role: r.value })} className={`p-3 rounded-xl border-2 text-sm font-medium transition ${form.role === r.value ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'}`}>
                       {r.label}
                     </button>
                   ))}
@@ -509,38 +508,38 @@ export default function AdminSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">بخش</label>
-                <input type="text" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" placeholder="مثلاً: فروش، مالی، ..." />
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">بخش</label>
+                <input type="text" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" placeholder="مثلاً: فروش، مالی، ..." />
               </div>
 
               {/* Org Hierarchy */}
-              <div className="p-4 bg-gray-50 rounded-xl space-y-3">
-                <p className="text-xs font-bold text-gray-700">🏢 ساختار سازمانی</p>
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl space-y-3">
+                <p className="text-xs font-bold text-gray-700 dark:text-gray-300">🏢 ساختار سازمانی</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-medium text-gray-500 mb-1">شرکت</label>
-                    <select value={form.company || ''} onChange={(e) => setForm({ ...form, company: Number(e.target.value) || null, division: null, team: null })} className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">شرکت</label>
+                    <select value={form.company || ''} onChange={(e) => setForm({ ...form, company: Number(e.target.value) || null, division: null, team: null })} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
                       <option value="">بدون شرکت</option>
                       {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-medium text-gray-500 mb-1">واحد</label>
-                    <select value={form.division || ''} onChange={(e) => setForm({ ...form, division: Number(e.target.value) || null, team: null })} className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" disabled={!form.company}>
+                    <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">واحد</label>
+                    <select value={form.division || ''} onChange={(e) => setForm({ ...form, division: Number(e.target.value) || null, team: null })} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" disabled={!form.company}>
                       <option value="">بدون واحد</option>
                       {filteredDivisions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-medium text-gray-500 mb-1">تیم</label>
-                    <select value={form.team || ''} onChange={(e) => setForm({ ...form, team: Number(e.target.value) || null })} className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" disabled={!form.division}>
+                    <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">تیم</label>
+                    <select value={form.team || ''} onChange={(e) => setForm({ ...form, team: Number(e.target.value) || null })} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" disabled={!form.division}>
                       <option value="">بدون تیم</option>
                       {filteredTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-medium text-gray-500 mb-1">گزارش‌دهی به</label>
-                    <select value={form.reports_to || ''} onChange={(e) => setForm({ ...form, reports_to: Number(e.target.value) || null })} className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <label className="block text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1">گزارش‌دهی به</label>
+                    <select value={form.reports_to || ''} onChange={(e) => setForm({ ...form, reports_to: Number(e.target.value) || null })} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
                       <option value="">بدون مدیر</option>
                       {allUsers.filter((u) => u.id !== editingUser?.id).map((u) => (
                         <option key={u.id} value={u.id}>{u.first_name || u.last_name ? `${u.first_name} ${u.last_name}` : u.username}</option>
@@ -552,14 +551,14 @@ export default function AdminSettingsPage() {
 
               {!editingUser && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">رمز عبور *</label>
-                  <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" placeholder="حداقل ۸ کاراکتر" />
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور *</label>
+                  <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" placeholder="حداقل ۸ کاراکتر" />
                 </div>
               )}
             </div>
 
-            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition">انصراف</button>
+            <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-end gap-3">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition">انصراف</button>
               <button onClick={handleSubmit} className="px-6 py-2 bg-indigo-600 text-white text-sm rounded-xl hover:bg-indigo-700 transition font-medium">
                 {editingUser ? 'ذخیره تغییرات' : 'ساخت کاربر'}
               </button>

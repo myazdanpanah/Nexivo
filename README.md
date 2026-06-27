@@ -7,7 +7,7 @@
 **An intelligent dashboard platform for building, visualizing, and sharing business data — with full RTL (Persian/Farsi) support and role-based access control.**
 
 [![CI](https://github.com/myazdanpanah/Nexivo/actions/workflows/tests.yml/badge.svg)](https://github.com/myazdanpanah/Nexivo/actions/workflows/tests.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: Pro](https://img.shields.io/badge/License-Nexivo%20Pro-purple.svg)](LICENSE)
 
 </div>
 
@@ -57,15 +57,23 @@ Nexivo is a self-hosted Business Intelligence platform that lets you:
 | **Data Upload** | Drag-and-drop Excel (.xlsx/.xls) and CSV file upload with automatic parsing and PostgreSQL table creation |
 | **Dashboard Builder** | Drag-and-drop responsive grid layout using `react-grid-layout`; resize, reorder, and configure widgets |
 | **Multi-Page Dashboards** | Create multiple pages within a single dashboard with tab navigation, drag-and-drop page reordering, page duplication, and per-page filters |
-| **Charts** | Bar, Line, Pie, Area, Scatter, Data Table, KPI Card, Gauge, Heatmap, Tree Map, Sankey, Funnel, Radar, Graph, Map — powered by Apache ECharts |
+| **Charts** | Bar, Horizontal Bar, Line, Pie, Area, Scatter, Data Table, KPI Card, Gauge, Heatmap, Tree Map, Sankey, Funnel, Radar, Graph, Map — powered by Apache ECharts |
+| **Chart Styling** | Background color/image, text color picker, color wheel/picker for widget backgrounds |
+| **Sort & Limit** | Sort charts by max/min values, limit bar count for impressive visualizations |
+| **Dark Theme** | System-wide dark/light mode toggle, persisted in localStorage |
 | **RTL Support** | Full right-to-left layout for Persian/Farsi, including the Vazirmatn font and ECharts RTL configuration |
 | **Dashboard-Level Filters** | Looker Studio-style filter bar with dropdown, date range, text search, checkbox, and slider controls — persisted to backend |
 | **Widget-Level Filters** | Per-widget filter configuration with operators (eq, neq, contains, gt, lt, between, in, starts_with, ends_with) |
 | **Dataset-Aware Filtering** | Filters automatically match by dataset — a filter on Dataset A won't affect widgets from Dataset B |
 | **Cross-Chart Filtering** | Click on a chart element to filter other charts in the dashboard |
 | **Drill-Down** | Table widgets support click-to-drill-down with breadcrumb navigation |
-| **Data Aggregation** | Automatic GROUP BY with SUM/COUNT/AVG/MIN/MAX; date grouping by year/quarter/month/week/day/hour |
-| **Role-Based Access** | Four roles — Admin, CEO, Finance, Sales — with per-dataset and per-dashboard access control |
+| **Data Aggregation** | Automatic GROUP BY with SUM/COUNT/COUNT_DISTINCT/AVG/MIN/MAX; date grouping by year/quarter/month/week/day/hour |
+| **Role-Based Access** | Four roles — Admin, CEO, Finance, Sales — with per-dataset, per-dashboard, per-page, and per-filter access control |
+| **Organization Hierarchy** | Company → Division → Team structure with org chart visualization |
+| **Bulk Assignment** | Assign dashboards to entire teams, divisions, or companies at once |
+| **Dashboard Templates** | Pre-built templates for Sales, Finance, Marketing, HR, Retail |
+| **Notifications** | Real-time bell icon with unread count, assignment alerts |
+| **Dashboard Management** | Rename, edit description, duplicate, share dashboards via context menu |
 | **Row-Level Security** | PostgreSQL RLS policies combined with role-based filters applied at query time |
 | **JWT Authentication** | Stateless JWT authentication with automatic token refresh and 401 handling |
 | **Superset Integration** | Embedded Apache Superset for advanced charting, with guest token generation and RLS forwarding |
@@ -455,9 +463,17 @@ The GitHub Actions workflow runs on every push and PR to `main`:
 
 ---
 
+## Screenshots
+
+> Screenshots will be added after the first public release. Visit [codebuff.com](https://codebuff.com) for live demos.
+
+---
+
 ## License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **Nexivo Pro License** — see the [LICENSE](LICENSE) file for details.
+
+Commercial use requires a separate license. Contact commercial@nexivo.dev for inquiries.
 
 ---
 

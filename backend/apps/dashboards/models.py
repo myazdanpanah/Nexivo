@@ -55,6 +55,7 @@ class DashboardPage(models.Model):
 
     # Grid layout for this page
     layout = models.JSONField(default=list, blank=True)
+    mobile_layout = models.JSONField(default=list, blank=True, verbose_name="Mobile layout grid")
 
     # Page-level filter controls (Looker Studio-style, persisted as JSON)
     filter_controls = models.JSONField(
@@ -88,6 +89,7 @@ class Widget(models.Model):
 
     CHART_TYPES = [
         ("bar", "Bar Chart"),
+        ("bar_horizontal", "Horizontal Bar"),
         ("stacked_bar", "Stacked Bar"),
         ("line", "Line Chart"),
         ("area", "Area Chart"),

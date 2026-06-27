@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import * as echarts from 'echarts'
 import { applyRTL } from '../utils/rtlConfig'
-import { getChartDefaults } from '../utils/chartDefaults'
-import { formatKpiValue, type KpiFormat } from '../utils/kpiFormat'
+import { getChartDefaults, readFontConfig } from '../utils/chartDefaults'
+import { formatKpiValue, toPersianDigits, type KpiFormat } from '../utils/kpiFormat'
 import { type DashboardFilter } from '../store/dashboardStore'
 import { isMapRegistered, registerMap } from '../utils/mapRegistry'
 import { getPaletteColors } from '../utils/palettes'
@@ -35,8 +35,7 @@ const NO_AGG_TYPES = new Set(['table', 'sankey', 'graph'])
 
 /**
  * Chart types where all selected columns are treated as metrics (no GROUP BY dimension).
- */
-const ALL_METRIC_TYPES = new Set(['kpi'])
+ */  const ALL_METRIC_TYPES = new Set(['kpi'])
 
 /** Column types that support numeric aggregation. */
 const NUMERIC_TYPES = new Set([
@@ -147,6 +146,95 @@ function resolveColors(customConfig: Record<string, unknown>, count: number): st
   return result
 }
 
+/**
+ * Sort rows by a numeric value column and optionally cap to top-N.
+ * `sortBy` ∈ {'asc','desc'}; absent → keep original order (still honors sortLimit).
+ * Always returns a fresh array.
+ */
+function applySortLimit(
+  data: Record<string, unknown>[],
+  valueCol: string,
+  sortBy: string | undefined,
+  sortLimit: number | undefined,
+): Record<string, unknown>[] {
+  if (sortBy === 'asc' || sortBy === 'desc') {
+    const sorted = [...data].sort((a, b) => {
+      const aVal = Number(a[valueCol]) || 0
+      const bVal = Number(b[valueCol]) || 0
+      return sortBy === 'asc' ? aVal - bVal : bVal - aVal
+    })
+    return sortLimit && sortLimit > 0 ? sorted.slice(0, sortLimit) : sorted
+  }
+  if (sortLimit && sortLimit > 0) {
+    return data.slice(0, sortLimit)
+  }
+  return [...data]
+}
+
+/** Read chartConfig.sortBy as a clean string. */
+function readSortBy(cfg: Record<string, unknown>): string | undefined {
+  const v = cfg.sortBy
+  return v === 'asc' || v === 'desc' ? v : undefined
+}
+
+/** Per-key color: explicit override beats cycled palette. */
+function resolveKeyedColors(
+  customConfig: Record<string, unknown>,
+  keys: string[],
+  overrideField: string,
+): string[] {
+  const overrides = (customConfig[overrideField] as Record<string, string> | undefined) || {}
+  const palette = resolveColors(customConfig, Math.max(keys.length, 10))
+  return keys.map((k, i) => overrides[k] || palette[i % palette.length])
+}
+
+/** A single conditional-formatting rule. */
+interface ConditionalRule {
+  column: string
+  op: 'gt' | 'gte' | 'lt' | 'lte' | 'eq' | 'between'
+  value: number
+  value2?: number // for 'between'
+  color: string
+}
+
+/** Read conditional rules off chartConfig (defensive). */
+function readConditionalRules(cfg: Record<string, unknown> | undefined): ConditionalRule[] {
+  const raw = (cfg?.conditionalRules as Array<Record<string, unknown>> | undefined) || []
+  const out: ConditionalRule[] = []
+  for (const r of raw) {
+    const op = r.op as ConditionalRule['op']
+    if (!op || typeof r.value !== 'number' || typeof r.color !== 'string') continue
+    out.push({
+      column: String(r.column ?? ''),
+      op,
+      value: r.value,
+      value2: typeof r.value2 === 'number' ? r.value2 : undefined,
+      color: r.color,
+    })
+  }
+  return out
+}
+
+/**
+ * Evaluate conditional rules against a value. Returns the first matching
+ * rule's color, or null. Earlier rules win (first-match precedence).
+ */
+function evalConditionalRules(rules: ConditionalRule[], value: number): string | null {
+  for (const r of rules) {
+    let hit = false
+    switch (r.op) {
+      case 'gt': hit = value > r.value; break
+      case 'gte': hit = value >= r.value; break
+      case 'lt': hit = value < r.value; break
+      case 'lte': hit = value <= r.value; break
+      case 'eq': hit = value === r.value; break
+      case 'between': hit = r.value2 !== undefined && value >= r.value && value <= r.value2; break
+    }
+    if (hit) return r.color
+  }
+  return null
+}
+
 function buildChartOption(
   chartType: string,
   queryResult: QueryResult,
@@ -160,6 +248,19 @@ function buildChartOption(
   const legendPos = ws?.legendPosition || 'bottom'
   const tooltipBg = ws?.tooltipStyle === 'dark' ? '#1a1a2e' : undefined
   const tooltipFg = ws?.tooltipStyle === 'dark' ? '#e2e8f0' : undefined
+
+  // Configurable font sizes
+  const fc = readFontConfig(customConfig)
+  const labelFontSize = fc.labelSize || 11
+
+  // Axis label formatter with Persian digits for numeric axes
+  const persianAxisFormatter = (val: unknown) => {
+    if (typeof val === 'number') return toPersianDigits(val)
+    return toPersianDigits(String(val))
+  }
+
+  // Conditional formatting rules
+  const condRules = readConditionalRules(customConfig)
 
   if (data.length === 0 || columns.length === 0) {
     return {
@@ -181,10 +282,20 @@ function buildChartOption(
   if (chartType === 'pie' || chartType === 'donut') {
     const labelCol = columns[0]
     const valueCol = columns.length > 1 ? columns[1] : columns[0]
-    const pieData = data.map((row) => ({
+
+    // Apply sort & limit (top-N) consistently with bar charts
+    const sortBy = readSortBy(customConfig)
+    const sortLimit = customConfig.sortLimit as number | undefined
+    const slicedData = applySortLimit(data, valueCol, sortBy, sortLimit)
+
+    const pieData = slicedData.map((row) => ({
       name: String(row[labelCol] ?? ''),
       value: Number(row[valueCol]) || 0,
     }))
+
+    // Per-slice colors: explicit overrides beat palette, conditional rules beat overrides
+    const sliceKeys = pieData.map((d) => d.name)
+    const sliceColors = resolveKeyedColors(customConfig, sliceKeys, 'sliceColors')
 
     const pieDefaults = getChartDefaults(chartType) as Record<string, unknown>
     return {
@@ -196,11 +307,16 @@ function buildChartOption(
           type: 'pie',
           radius: chartType === 'donut' ? ['45%', '70%'] : ['0%', '70%'],
           center: ['50%', '50%'],
-          data: pieData,
+          data: pieData.map((d, i) => ({
+            ...d,
+            itemStyle: {
+              color: evalConditionalRules(condRules, d.value) || sliceColors[i],
+            },
+          })),
           label: {
             show: true,
             formatter: '{b}\n{d}%',
-            fontSize: 11,
+            fontSize: labelFontSize,
           },
           emphasis: {
             itemStyle: {
@@ -240,7 +356,7 @@ function buildChartOption(
         type: 'scatter',
         symbolSize: sizeCol ? (val: number[]) => Math.sqrt(val[2]) * 2 : 12,
         data: scatterData,
-        itemStyle: { color: '#6366f1' },
+        itemStyle: { color: (customConfig.singleColor as string) || resolveColors(customConfig, 1)[0] },
       }],
     }
   }
@@ -618,28 +734,76 @@ function buildChartOption(
     }
   }
 
-  // For bar, stacked_bar, line, area charts — first column = category, remaining = series
+  // For bar, bar_horizontal, stacked_bar, line, area charts — first column = category, remaining = series
   const categoryCol = columns[0]
-  const categoryData = data.map((row) => String(row[categoryCol] ?? ''))
   const valueCols = columns.slice(1)
+  // Sort/limit target column = first metric (or the category column itself if none)
+  const sortValueCol = valueCols.length > 0 ? valueCols[0] : categoryCol
+  const sortBy = readSortBy(customConfig)
+  const sortLimit = customConfig.sortLimit as number | undefined
+  const sortedData = applySortLimit(data, sortValueCol, sortBy, sortLimit)
+  const categoryData = sortedData.map((row) => String(row[categoryCol] ?? ''))
 
-  const barColors = resolveColors(customConfig, valueCols.length)
+  const isHorizontal = chartType === 'bar_horizontal'
+  const actualType = isHorizontal ? 'bar' : chartType
+
+  const barColors = resolveKeyedColors(customConfig, valueCols, 'seriesColors')
   const isStacked = chartType === 'stacked_bar'
-  const seriesType = isStacked ? 'bar' : (chartType === 'area' ? 'line' : chartType)
+  const seriesType = isStacked ? 'bar' : (chartType === 'area' ? 'line' : actualType)
 
   const series = valueCols.map((col, idx) => ({
     name: col,
     type: seriesType,
     stack: isStacked ? 'total' : undefined,
-    data: data.map((row) => Number(row[col]) || 0),
+    data: sortedData.map((row) => {
+      const v = Number(row[col]) || 0
+      return {
+        value: v,
+        itemStyle: condRules.length > 0
+          ? { color: evalConditionalRules(condRules, v) || barColors[idx % barColors.length] }
+          : undefined,
+      }
+    }),
     smooth: chartType === 'line' || chartType === 'area',
     areaStyle: chartType === 'area' ? { opacity: 0.3 } : undefined,
     itemStyle: {
       color: barColors[idx % barColors.length],
-      borderRadius: (chartType === 'bar' || isStacked) && !isStacked ? [4, 4, 0, 0] : undefined,
+      borderRadius: chartType === 'bar' ? [4, 4, 0, 0] : undefined,
     },
     barMaxWidth: 40,
   }))
+
+  // Horizontal bar: swap xAxis and yAxis
+  if (isHorizontal) {
+    return {
+      ...defaults,
+      ...customConfig,
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: tooltipBg,
+        textStyle: tooltipFg ? { color: tooltipFg } : undefined,
+        axisPointer: { type: 'shadow' },
+      },
+      legend: valueCols.length > 1 ? (legendPos === 'hidden' ? { show: false } : { show: true, [legendPos]: 10 }) : { show: false },
+      grid: {
+        top: valueCols.length > 1 ? 40 : 30,
+        right: 30,
+        bottom: 30,
+        left: 80,
+        containLabel: true,
+      },
+      xAxis: {
+        type: 'value' as const,
+        axisLabel: { fontSize: labelFontSize, formatter: persianAxisFormatter },
+      },
+      yAxis: {
+        type: 'category' as const,
+        data: categoryData,
+        axisLabel: { fontSize: labelFontSize },
+      },
+      series,
+    }
+  }
 
   return {
     ...defaults,
@@ -665,11 +829,12 @@ function buildChartOption(
       data: categoryData,
       axisLabel: {
         rotate: categoryData.length > 8 ? 45 : 0,
-        fontSize: 11,
+        fontSize: labelFontSize,
       },
     },
     yAxis: {
       type: 'value',
+      axisLabel: { fontSize: labelFontSize, formatter: persianAxisFormatter },
     },
     series,
   }
@@ -689,9 +854,11 @@ export default function ChartWidget({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tableData, setTableData] = useState<{ columns: string[]; rows: Record<string, unknown>[] } | null>(null)
-  const [kpiData, setKpiData] = useState<{ label: string; value: string; sub?: string } | null>(null)
+  const [kpiData, setKpiData] = useState<{ value: string; rawValue?: number } | null>(null)
 
   const usesECharts = widget.chartType !== 'table' && widget.chartType !== 'kpi'
+  const chartBgColor = (widget.chartConfig as Record<string, unknown>)?.bgColor as string | undefined
+  const chartBgImage = (widget.chartConfig as Record<string, unknown>)?.bgImage as string | undefined
 
   // Initialize and dispose chart instance (skip for non-ECharts types)
   useEffect(() => {
@@ -793,11 +960,7 @@ export default function ChartWidget({
         const fmt = (widget.chartConfig as Record<string, unknown>)?.kpiFormat as KpiFormat | undefined
         const formatted = formatKpiValue(num, fmt)
 
-        setKpiData({
-          label: valueCol,
-          value: formatted,
-          sub: `${result.row_count} ردیف`,
-        })
+        setKpiData({ value: formatted, rawValue: num })
       } else {
         if (!chart) return
         const chartOption = buildChartOption(
@@ -886,7 +1049,7 @@ export default function ChartWidget({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+      <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-600 text-sm">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
           در حال بارگذاری...
@@ -900,7 +1063,7 @@ export default function ChartWidget({
       <div className="h-full overflow-auto">
         {/* Drill-down breadcrumb */}
         {drillBreadcrumb.length > 0 && onDrillUp && (
-          <div className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-xs border-b">
+          <div className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-xs border-b dark:border-gray-700">
             <button onClick={() => onDrillUp(-1)} className="text-indigo-600 hover:text-indigo-800 font-medium">
               همه
             </button>
@@ -919,9 +1082,9 @@ export default function ChartWidget({
         )}
         <table className="w-full text-xs border-collapse">
           <thead>
-            <tr className="bg-gray-50">
+            <tr className="bg-gray-50 dark:bg-gray-800">
               {tableData.columns.map((col) => (
-                <th key={col} className="px-3 py-2 text-right font-medium text-gray-600 border-b">
+                <th key={col} className="px-3 py-2 text-right font-medium text-gray-600 dark:text-gray-400 border-b dark:border-gray-700">
                   {col}
                 </th>
               ))}
@@ -929,18 +1092,27 @@ export default function ChartWidget({
           </thead>
           <tbody>
             {tableData.rows.map((row, idx) => (
-              <tr key={idx} className="hover:bg-gray-50 transition">
-                {tableData.columns.map((col) => (
-                  <td
-                    key={col}
-                    className={`px-3 py-1.5 text-right text-gray-800 border-b border-gray-100 ${
-                      onDrillDown ? 'cursor-pointer hover:bg-indigo-50' : ''
-                    }`}
-                    onClick={onDrillDown ? () => onDrillDown(col, String(row[col] ?? '')) : undefined}
-                  >
-                    {row[col] != null ? String(row[col]) : '-'}
-                  </td>
-                ))}
+              <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+                {tableData.columns.map((col) => {
+                  const cellVal = Number(row[col])
+                  const condBg = !Number.isNaN(cellVal)
+                    ? evalConditionalRules(readConditionalRules(widget.chartConfig || {}), cellVal)
+                    : null
+                  return (
+                    <td
+                      key={col}
+                      className={`px-3 py-1.5 text-right text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 ${
+                        onDrillDown ? 'cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-900/30' : ''
+                      }`}
+                      style={condBg ? { backgroundColor: condBg } : undefined}
+                      onClick={onDrillDown ? () => onDrillDown(col, String(row[col] ?? '')) : undefined}
+                    >
+                      {row[col] != null
+                        ? (typeof row[col] === 'number' ? toPersianDigits(row[col] as number) : String(row[col]))
+                        : '-'}
+                    </td>
+                  )
+                })}
               </tr>
             ))}
           </tbody>
@@ -958,17 +1130,27 @@ export default function ChartWidget({
       )
     }
     if (kpiData) {
+      const cfg = widget.chartConfig || {}
+      const fontConfig = readFontConfig(cfg)
+      // Color precedence: conditional rule → explicit singleColor → default
+      const kpiVal = kpiData.rawValue ?? 0
+      const condColor = evalConditionalRules(readConditionalRules(cfg), kpiVal)
+      const kpiColor =
+        condColor ||
+        (cfg.singleColor as string) ||
+        undefined
+
       return (
         <div className="flex flex-col items-center justify-center h-full p-4">
-          <span className="text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
-            {kpiData.label}
-          </span>
-          <span className="text-3xl font-extrabold text-indigo-600 leading-none">
+          <span
+            className="font-extrabold leading-none text-indigo-600 dark:text-indigo-400"
+            style={{
+              fontSize: `${fontConfig.valueSize || 30}px`,
+              color: kpiColor,
+            }}
+          >
             {kpiData.value}
           </span>
-          {kpiData.sub && (
-            <span className="text-xs text-gray-400 mt-2">{kpiData.sub}</span>
-          )}
         </div>
       )
     }
@@ -995,10 +1177,20 @@ export default function ChartWidget({
     )
   }
 
+  const containerStyle: React.CSSProperties = {
+    height: '100%',
+    width: '100%',
+    minHeight: '200px',
+    backgroundColor: chartBgColor || undefined,
+    backgroundImage: chartBgImage ? `url(${chartBgImage})` : undefined,
+    backgroundSize: chartBgImage ? 'cover' : undefined,
+    backgroundPosition: chartBgImage ? 'center' : undefined,
+  }
+
   return (
     <div
       ref={chartRef}
-      style={{ height: '100%', width: '100%', minHeight: '200px' }}
+      style={containerStyle}
     />
   )
 }

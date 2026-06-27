@@ -11,11 +11,15 @@ export function applyRTL(option: EChartsOption, isRTL: boolean): EChartsOption {
 
   const rtlOption = { ...option }
 
-  // Reverse X axis for horizontal charts
+  // Reverse X axis for category/label charts only.
+  // Value axes (scatter/line numeric) must NOT be flipped — it breaks the reading.
   if (rtlOption.xAxis && typeof rtlOption.xAxis === 'object' && !Array.isArray(rtlOption.xAxis)) {
-    rtlOption.xAxis = {
-      ...rtlOption.xAxis,
-      inverse: true,
+    const xa = rtlOption.xAxis as { type?: string }
+    if (xa.type !== 'value' && xa.type !== 'time' && xa.type !== 'log') {
+      rtlOption.xAxis = {
+        ...rtlOption.xAxis,
+        inverse: true,
+      }
     }
   }
 

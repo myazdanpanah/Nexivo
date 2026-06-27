@@ -31,14 +31,14 @@ class DashboardPageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DashboardPage
-        fields = ["id", "name", "order", "layout", "filter_controls", "allowed_roles", "widgets", "created_at", "updated_at"]
+        fields = ["id", "name", "order", "layout", "mobile_layout", "filter_controls", "allowed_roles", "widgets", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
 class DashboardPageCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DashboardPage
-        fields = ["name", "order", "layout", "filter_controls", "allowed_roles"]
+        fields = ["name", "order", "layout", "mobile_layout", "filter_controls", "allowed_roles"]
 
 
 class DashboardPageExportSerializer(serializers.ModelSerializer):
@@ -47,7 +47,7 @@ class DashboardPageExportSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DashboardPage
-        fields = ["name", "order", "layout", "filter_controls", "allowed_roles", "widgets"]
+        fields = ["name", "order", "layout", "mobile_layout", "filter_controls", "allowed_roles", "widgets"]
 
 
 class DashboardSerializer(serializers.ModelSerializer):

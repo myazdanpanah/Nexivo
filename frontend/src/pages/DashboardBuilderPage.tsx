@@ -7,6 +7,7 @@ import ChartWidget from '../components/ChartWidget'
 import WidgetConfigPanel from '../components/WidgetConfigPanel'
 import DashboardFilterBar from '../components/DashboardFilterBar'
 import PageNavBar from '../components/PageNavBar'
+import ThemeToggle from '../components/ThemeToggle'
 import { useToast } from '../components/Toast'
 import { Plus, ArrowRight, Settings, Trash2, Share2, X } from 'lucide-react'
 import { ALL_ROLES } from '../utils/roles'
@@ -40,6 +41,8 @@ export default function DashboardBuilderPage() {
   const [editingWidget, setEditingWidget] = useState<string | null>(null)
   const [mobileSettingsWidget, setMobileSettingsWidget] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
+  // Builder device mode: 'auto' follows viewport; 'desktop'/'mobile' force a layout for editing.
+  const [deviceMode, setDeviceMode] = useState<'auto' | 'desktop' | 'mobile'>('auto')
   // Share modal state
   const [showShareModal, setShowShareModal] = useState(false)
   const [shareRoles, setShareRoles] = useState<string[]>([])
@@ -91,11 +94,25 @@ export default function DashboardBuilderPage() {
           }))
         }
 
+        // Mobile layout: prefer persisted, else derive a stacked full-width grid
+        // from the desktop layout (one widget per row, w=12).
+        let mobileLayout = ((p.mobile_layout as Array<Record<string, unknown>>) || []).map((l) => ({
+          i: String(l.i),
+          x: l.x as number,
+          y: l.y as number,
+          w: l.w as number,
+          h: l.h as number,
+        }))
+        if (mobileLayout.length === 0) {
+          mobileLayout = pageLayout.map((l, idx) => ({ i: l.i, x: 0, y: idx, w: 12, h: l.h }))
+        }
+
         return {
           id: String(p.id),
           name: p.name as string,
           order: p.order as number,
           layout: pageLayout,
+          mobileLayout,
           filterControls: (p.filter_controls as DashboardFilterControl[]) || [],
           allowedRoles: (p.allowed_roles as string[]) || [],
           widgets: rawWidgets.map((w) => ({
@@ -144,14 +161,21 @@ export default function DashboardBuilderPage() {
   // Get active page data
   const activePage = pages.find((p) => p.id === activePageId)
   const currentPageWidgets = activePage?.widgets || widgets
-  const currentPageLayout = activePage?.layout || layout
+  // Effective device: builder override beats viewport auto-detection.
+  const editingMobile = deviceMode === 'mobile' || (deviceMode === 'auto' && isMobile)
+  const desktopLayout = activePage?.layout || layout
+  const mobileLayout = activePage?.mobileLayout || desktopLayout.map((l, idx) => ({ ...l, x: 0, y: idx, w: 12 }))
+  const currentPageLayout = editingMobile ? mobileLayout : desktopLayout
 
   const handleLayoutChange = useCallback(
     (newLayout: Array<{ i: string; x: number; y: number; w: number; h: number }>) => {
       if (activePage && activePageId) {
-        // Update page layout
         const { updatePage } = useDashboardStore.getState()
-        updatePage(activePageId, { layout: newLayout })
+        if (editingMobile) {
+          updatePage(activePageId, { mobileLayout: newLayout })
+        } else {
+          updatePage(activePageId, { layout: newLayout })
+        }
       } else {
         setLayout(newLayout)
       }
@@ -160,10 +184,11 @@ export default function DashboardBuilderPage() {
         api.put(`/dashboards/${id}/layout/`, {
           layout: newLayout,
           page_id: activePageId || undefined,
+          device: editingMobile ? 'mobile' : 'desktop',
         }).catch(() => {})
       }
     },
-    [activePageId, id, setLayout]
+    [activePageId, id, setLayout, editingMobile]
   )
 
   const addNewWidget = async () => {
@@ -236,23 +261,41 @@ export default function DashboardBuilderPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50" dir="rtl">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900" dir="rtl">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-3">
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-6 py-3">
         <div className="max-w-full mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
               to="/dashboards"
-              className="p-2 text-gray-400 hover:text-gray-600 transition"
+              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
             >
               <ArrowRight className="w-5 h-5" />
             </Link>
-            <h1 className="text-lg font-bold text-gray-900">ویرایشگر داشبورد</h1>
+            <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">ویرایشگر داشبورد</h1>
+            {/* Device mode toggle (Desktop / Mobile builder) */}
+            <div className="flex items-center gap-1 mr-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
+              {(['desktop', 'mobile'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setDeviceMode(mode)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition ${
+                    deviceMode === mode
+                      ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                  title={mode === 'mobile' ? 'ویرایش چیدمان موبایل' : 'ویرایش چیدمان دسکتاپ'}
+                >
+                  {mode === 'mobile' ? '📱 موبایل' : '🖥️ دسکتاپ'}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <button
               onClick={openShareModal}
-              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"
+              className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm"
               title="اشتراک‌گذاری و دسترسی"
             >
               <Share2 className="w-4 h-4" />
@@ -279,11 +322,11 @@ export default function DashboardBuilderPage() {
       <main className="p-6">
         {currentPageWidgets.length === 0 ? (
           <div className="text-center py-20">
-            <Settings className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
+            <Settings className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
               {activePage ? `${activePage.name} خالی است` : 'داشبورد خالی است'}
             </h3>
-            <p className="text-gray-500 mb-6">
+            <p className="text-gray-500 dark:text-gray-400 mb-6">
               اولین نمودار خود را اضافه کنید
             </p>
             <button
@@ -314,9 +357,9 @@ export default function DashboardBuilderPage() {
                 const radius = ws?.borderRadius ?? 16
                 return (
                   <div key={w.id} className="group" style={{ direction: 'rtl', textAlign: 'right' }}>
-                    <div className={`bg-white border border-gray-200 h-full overflow-hidden ${shadow} hover:shadow-md transition`} style={{ borderRadius: radius }}>
-                      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
-                        <span className="text-sm font-medium text-gray-700 truncate">
+                    <div className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 h-full overflow-hidden ${shadow} hover:shadow-md transition`} style={{ borderRadius: radius }}>
+                      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-gray-700">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">
                           {w.title}
                         </span>
                         <div className="flex items-center gap-1">
@@ -412,37 +455,37 @@ export default function DashboardBuilderPage() {
       {showShareModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" dir="rtl">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowShareModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900">اشتراک‌گذاری و دسترسی</h3>
-              <button onClick={() => setShowShareModal(false)} className="p-1 text-gray-400 hover:text-gray-600">
+          <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+              <h3 className="font-bold text-gray-900 dark:text-gray-100">اشتراک‌گذاری و دسترسی</h3>
+              <button onClick={() => setShowShareModal(false)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6">
-              <p className="text-sm text-gray-500 mb-4">نقش‌هایی که به این داشبورد دسترسی دارند:</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">نقش‌هایی که به این داشبورد دسترسی دارند:</p>
               <div className="space-y-2">
                 {ALL_ROLES.map((r) => (
                   <label
                     key={r.value}
-                    className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:bg-gray-50 cursor-pointer transition"
+                    className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition"
                   >
                     <input
                       type="checkbox"
                       checked={shareRoles.includes(r.value)}
                       onChange={() => setShareRoles((prev) => prev.includes(r.value) ? prev.filter((v) => v !== r.value) : [...prev, r.value])}
-                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 dark:border-gray-500 focus:ring-indigo-500"
                     />
-                    <span className="text-sm font-medium text-gray-700">{r.label}</span>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{r.label}</span>
                   </label>
                 ))}
               </div>
               <p className="text-[10px] text-gray-400 mt-3">بدون انتخاب = همه نقش‌ها مجازند</p>
             </div>
-            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-end gap-3">
               <button
                 onClick={() => setShowShareModal(false)}
-                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition"
+                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition"
               >
                 انصراف
               </button>

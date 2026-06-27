@@ -4,16 +4,51 @@
 
 import type { EChartsOption } from 'echarts'
 
+/** Font configuration stored on widget.chartConfig. */
+export interface FontConfig {
+  /** Axis/category/label text size (px). */
+  labelSize?: number
+  /** Value/number text size (px). */
+  valueSize?: number
+  /** Optional explicit font family override. */
+  fontFamily?: string
+}
+
+/** Read a FontConfig off a chartConfig object (defensive). */
+export function readFontConfig(cfg: Record<string, unknown> | undefined): FontConfig {
+  const f = (cfg?.fontConfig as Record<string, unknown> | undefined) || {}
+  return {
+    labelSize: typeof f.labelSize === 'number' ? f.labelSize : undefined,
+    valueSize: typeof f.valueSize === 'number' ? f.valueSize : undefined,
+    fontFamily: typeof f.fontFamily === 'string' && f.fontFamily.trim()
+      ? f.fontFamily
+      : undefined,
+  }
+}
+
+const BASE_FONT_FAMILY = "'Vazirmatn', Tahoma, Arial, sans-serif"
+
+/** Resolve an effective font family for ECharts. */
+export function resolveFontFamily(cfg: Record<string, unknown> | undefined): string {
+  return readFontConfig(cfg).fontFamily || BASE_FONT_FAMILY
+}
+
 const baseTheme = {
   backgroundColor: 'transparent',
   textStyle: {
-    fontFamily: "'Vazirmatn', Tahoma, Arial, sans-serif",
+    fontFamily: BASE_FONT_FAMILY,
   },
 }
 
 export function getChartDefaults(chartType: string): EChartsOption {
   const base: EChartsOption = {
     ...baseTheme,
+    // Titles render centered across all chart types.
+    title: {
+      left: 'center',
+      textAlign: 'center',
+      textVerticalAlign: 'top',
+    },
     grid: {
       top: 40,
       right: 20,

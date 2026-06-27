@@ -123,8 +123,8 @@ NUMERIC_PG_TYPES = {
     "BIGINT", "INTEGER", "SMALLINT", "DOUBLE PRECISION",
     "REAL", "NUMERIC", "DECIMAL", "FLOAT", "INT64", "FLOAT64",
 }
-# COUNT works on any type; these are the only ones that support SUM/AVG/MIN/MAX
-AGG_NUMERIC_FUNCTIONS = {"SUM", "AVG", "MIN", "MAX", "COUNT_DISTINCT"}
+# COUNT works on any type; COUNT_DISTINCT also works on any type; these are the only ones that support SUM/AVG/MIN/MAX
+AGG_NUMERIC_FUNCTIONS = {"SUM", "AVG", "MIN", "MAX"}
 
 
 @api_view(["POST"])
@@ -146,6 +146,15 @@ def dataset_query(request, pk):
         dataset = Dataset.objects.get(pk=pk)
     except Dataset.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
+
+    # Role check (mirrors dataset_detail): a non-CEO/staff user may only
+    # query datasets shared with their role.
+    if request.user.role != "ceo" and not request.user.is_staff:
+        if request.user.role not in dataset.allowed_roles:
+            return Response(
+                {"error": "You do not have access to this dataset"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
     # Get role-based filters
     filters = DataFilter.objects.filter(
@@ -357,7 +366,10 @@ def dataset_query(request, pk):
         for col in metric_cols:
             func = metrics_map[col].upper()
             alias = col
-            select_parts.append(f'{func}("{col}") AS "{alias}"')
+            if func == 'COUNT_DISTINCT':
+                select_parts.append(f'COUNT(DISTINCT "{col}") AS "{alias}"')
+            else:
+                select_parts.append(f'{func}("{col}") AS "{alias}"')
 
         # Build query — only add GROUP BY if there are dimensions
         if dim_cols:

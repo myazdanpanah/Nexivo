@@ -55,12 +55,12 @@ function MemberCard({ member, compact = false }: { member: OrgMember; compact?: 
 
   if (compact) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-100 rounded-xl hover:shadow-sm transition">
+      <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl hover:shadow-sm transition">
         <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600 flex-shrink-0">
           {initials}
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-medium text-gray-800 truncate">{fullName}</p>
+          <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{fullName}</p>
           <p className="text-[10px] text-gray-400">{ROLE_LABELS[member.role] || member.role}</p>
         </div>
       </div>
@@ -68,14 +68,14 @@ function MemberCard({ member, compact = false }: { member: OrgMember; compact?: 
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-4 hover:shadow-lg transition group">
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 hover:shadow-lg transition group">
       <div className="flex items-center gap-3">
         <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center text-lg font-bold text-indigo-700 group-hover:bg-indigo-200 transition">
           {initials}
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-bold text-gray-900 truncate">{fullName}</p>
-          <p className="text-xs text-gray-500">@{member.username}</p>
+          <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{fullName}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">@{member.username}</p>
           <span className={`inline-block mt-1 px-2 py-0.5 rounded-lg text-[10px] font-medium border ${ROLE_COLORS[member.role] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
             {ROLE_LABELS[member.role] || member.role}
           </span>
@@ -92,21 +92,21 @@ function TeamNode({ team }: { team: OrgTeam }) {
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className="border border-gray-200 rounded-2xl overflow-hidden">
+    <div className="border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition text-right"
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition text-right"
       >
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 text-indigo-500" />
-          <span className="text-sm font-bold text-gray-800">{team.name}</span>
-          <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">{team.members.length}</span>
+          <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{team.name}</span>
+          <span className="text-[10px] bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded-full">{team.members.length}</span>
         </div>
         {expanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
       </button>
 
       {expanded && (
-        <div className="p-3 space-y-2 border-t border-gray-100">
+        <div className="p-3 space-y-2 border-t border-gray-100 dark:border-gray-700">
           {team.manager && (
             <div>
               <p className="text-[10px] font-medium text-amber-600 mb-1 flex items-center gap-1">
@@ -126,7 +126,7 @@ function TeamNode({ team }: { team: OrgTeam }) {
             </div>
           )}
           {team.members.length === 0 && !team.manager && (
-            <p className="text-xs text-gray-400 text-center py-2">بدون عضو</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-2">بدون عضو</p>
           )}
         </div>
       )}
@@ -140,17 +140,17 @@ function DivisionNode({ division }: { division: OrgDivision }) {
     division.teams.reduce((sum, t) => sum + t.members.length, 0)
 
   return (
-    <div className="border border-gray-200 rounded-2xl overflow-hidden">
+    <div className="border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-5 py-4 bg-gradient-to-l from-indigo-50 to-white hover:from-indigo-100 transition text-right"
+        className="w-full flex items-center justify-between px-5 py-4 bg-gradient-to-l from-indigo-50 to-white dark:from-indigo-900/30 dark:to-gray-800 hover:from-indigo-100 transition text-right"
       >
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
             <FolderTree className="w-5 h-5 text-white" />
           </div>
           <div>
-            <span className="text-base font-bold text-gray-900">{division.name}</span>
+            <span className="text-base font-bold text-gray-900 dark:text-gray-100">{division.name}</span>
             <div className="flex items-center gap-2 mt-0.5">
               <span className="text-[10px] text-gray-400">{totalMembers} نفر</span>
               <span className="text-[10px] text-gray-400">·</span>
@@ -162,7 +162,7 @@ function DivisionNode({ division }: { division: OrgDivision }) {
       </button>
 
       {expanded && (
-        <div className="p-4 space-y-3 border-t border-gray-100">
+        <div className="p-4 space-y-3 border-t border-gray-100 dark:border-gray-700">
           {division.manager && (
             <div className="mb-3">
               <p className="text-[10px] font-medium text-amber-600 mb-1 flex items-center gap-1">
@@ -184,9 +184,8 @@ function DivisionNode({ division }: { division: OrgDivision }) {
           )}
 
           {division.teams.length > 0 && (
-            <div>
-              <p className="text-[10px] font-medium text-gray-400 mb-2">تیم‌ها ({division.teams.length})</p>
-              <div className="space-y-2 pl-4 border-r-2 border-indigo-100">
+            <div>                  <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 mb-2">تیم‌ها ({division.teams.length})</p>
+                  <div className="space-y-2 pl-4 border-r-2 border-indigo-100 dark:border-indigo-800">
                 {division.teams.map(team => (
                   <TeamNode key={team.id} team={team} />
                 ))}
@@ -235,11 +234,11 @@ export default function OrgChartPage() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-50" dir="rtl">
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900" dir="rtl">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link to="/dashboards" className="p-2 text-gray-400 hover:text-gray-600 transition">
+            <Link to="/dashboards" className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
               <ArrowRight className="w-5 h-5" />
             </Link>
             <div className="flex items-center gap-3">
@@ -247,8 +246,8 @@ export default function OrgChartPage() {
                 <Building2 className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-gray-900">نمودار سازمانی</h1>
-                <p className="text-xs text-gray-500">ساختار سازمانی شرکت و تیم‌ها</p>
+                <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">نمودار سازمانی</h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400">ساختار سازمانی شرکت و تیم‌ها</p>
               </div>
             </div>
           </div>
@@ -264,14 +263,13 @@ export default function OrgChartPage() {
             { label: 'تیم', count: totalStats.teams, icon: Users, color: 'bg-blue-100 text-blue-600' },
             { label: 'کارمند', count: totalStats.members, icon: User, color: 'bg-emerald-100 text-emerald-600' },
           ].map((stat) => (
-            <div key={stat.label} className="bg-white rounded-2xl border border-gray-200 p-4">
+            <div key={stat.label} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${stat.color}`}>
                   <stat.icon className="w-5 h-5" />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">{stat.count}</p>
-                  <p className="text-xs text-gray-500">{stat.label}</p>
+                <div>                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stat.count}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{stat.label}</p>
                 </div>
               </div>
             </div>
@@ -283,8 +281,8 @@ export default function OrgChartPage() {
         ) : orgTree.length === 0 ? (
           <div className="text-center py-20">
             <Building2 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">هنوز ساختار سازمانی تعریف نشده</h3>
-            <p className="text-gray-500 mb-6">از بخش مدیریت سازمانی شرکت، واحد و تیم اضافه کنید</p>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">هنوز ساختار سازمانی تعریف نشده</h3>
+            <p className="text-gray-500 dark:text-gray-400 mb-6">از بخش مدیریت سازمانی شرکت، واحد و تیم اضافه کنید</p>
             <Link
               to="/admin/org"
               className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium inline-block"
@@ -295,7 +293,7 @@ export default function OrgChartPage() {
         ) : (
           <div className="space-y-6">
             {orgTree.map((company) => (
-              <div key={company.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+              <div key={company.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div className="px-6 py-4 bg-gradient-to-l from-indigo-600 to-indigo-500">
                   <div className="flex items-center gap-3">
                     <Building2 className="w-6 h-6 text-white" />
@@ -315,7 +313,7 @@ export default function OrgChartPage() {
                   ))}
 
                   {company.unassigned && company.unassigned.length > 0 && (
-                    <div className="border border-dashed border-gray-300 rounded-2xl p-4">
+                    <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-2xl p-4">
                       <p className="text-xs font-medium text-gray-400 mb-2">بدون واحد سازمانی ({company.unassigned.length})</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {company.unassigned.map((m) => (

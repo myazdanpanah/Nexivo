@@ -14,6 +14,7 @@ export interface DashboardPageConfig {
   name: string
   order: number
   layout: GridItem[]
+  mobileLayout?: GridItem[]
   widgets: WidgetConfig[]
   filterControls?: DashboardFilterControl[]
   allowedRoles?: string[]
@@ -153,6 +154,11 @@ export const useDashboardStore = create<DashboardState>()(
                         ...p.layout,
                         { i: widget.id, x: 0, y: Infinity, w: 6, h: 4 },
                       ],
+                      // Seed a stacked full-width mobile layout entry
+                      mobileLayout: [
+                        ...(p.mobileLayout || []),
+                        { i: widget.id, x: 0, y: Infinity, w: 12, h: 4 },
+                      ],
                     }
                   : p
               ),
@@ -181,6 +187,7 @@ export const useDashboardStore = create<DashboardState>()(
             ...p,
             widgets: p.widgets.filter((w) => w.id !== id),
             layout: p.layout.filter((l) => l.i !== id),
+            mobileLayout: (p.mobileLayout || []).filter((l) => l.i !== id),
           })),
           widgets: state.widgets.filter((w) => w.id !== id),
           layout: state.layout.filter((l) => l.i !== id),

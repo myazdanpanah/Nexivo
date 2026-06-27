@@ -86,9 +86,11 @@ export default function DashboardAssignPage() {
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [divisions, setDivisions] = useState<OrgDivision[]>([])
   const [teams, setTeams] = useState<OrgTeam[]>([])
+  const [companies, setCompanies] = useState<Array<{ id: number; name: string }>>([])
   const [bulkForm, setBulkForm] = useState({
     dashboard: 0,
-    target_type: 'team' as 'division' | 'team',
+    target_type: 'team' as 'company' | 'division' | 'team',
+    company_id: 0,
     division_id: 0,
     team_id: 0,
     data_filters: [] as DataFilter[],
@@ -117,7 +119,7 @@ export default function DashboardAssignPage() {
 
   const fetchData = async () => {
     try {
-      const [assignRes, dashRes, userRes, , divRes, teamRes] = await Promise.all([
+      const [assignRes, dashRes, userRes, compRes, divRes, teamRes] = await Promise.all([
         api.get('/dashboards/assignments/'),
         api.get('/dashboards/'),
         api.get('/auth/users/'),
@@ -125,6 +127,7 @@ export default function DashboardAssignPage() {
         api.get('/auth/divisions/'),
         api.get('/auth/teams/'),
       ])
+      setCompanies(compRes.data)
       setDivisions(divRes.data)
       setTeams(teamRes.data)
       setAssignments(assignRes.data)
@@ -679,11 +682,21 @@ export default function DashboardAssignPage() {
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">نوع هدف *</label>
                 <div className="flex gap-2">
-                  <button onClick={() => setBulkForm({ ...bulkForm, target_type: 'team', team_id: 0 })} className={`flex-1 p-3 rounded-xl border-2 text-sm font-medium transition ${bulkForm.target_type === 'team' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}`}>تیم</button>
+                  <button onClick={() => setBulkForm({ ...bulkForm, target_type: 'company', company_id: 0 })} className={`flex-1 p-3 rounded-xl border-2 text-sm font-medium transition ${bulkForm.target_type === 'company' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}`}>شرکت</button>
                   <button onClick={() => setBulkForm({ ...bulkForm, target_type: 'division', division_id: 0, team_id: 0 })} className={`flex-1 p-3 rounded-xl border-2 text-sm font-medium transition ${bulkForm.target_type === 'division' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}`}>واحد</button>
+                  <button onClick={() => setBulkForm({ ...bulkForm, target_type: 'team', team_id: 0 })} className={`flex-1 p-3 rounded-xl border-2 text-sm font-medium transition ${bulkForm.target_type === 'team' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}`}>تیم</button>
                 </div>
               </div>
-              {bulkForm.target_type === 'team' ? (
+              {bulkForm.target_type === 'company' && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">شرکت *</label>
+                  <select value={bulkForm.company_id || ''} onChange={(e) => setBulkForm({ ...bulkForm, company_id: Number(e.target.value) })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="">انتخاب شرکت...</option>
+                    {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {bulkForm.target_type === 'team' && (
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">تیم *</label>
                   <select value={bulkForm.team_id || ''} onChange={(e) => setBulkForm({ ...bulkForm, team_id: Number(e.target.value) })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
@@ -691,7 +704,8 @@ export default function DashboardAssignPage() {
                     {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
-              ) : (
+              )}
+              {bulkForm.target_type === 'division' && (
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">واحد *</label>
                   <select value={bulkForm.division_id || ''} onChange={(e) => setBulkForm({ ...bulkForm, division_id: Number(e.target.value) })} className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
@@ -727,19 +741,19 @@ export default function DashboardAssignPage() {
             <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
               <button onClick={() => setShowBulkModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition">انصراف</button>
               <button
-                onClick={async () => {
-                  if (!bulkForm.dashboard || (bulkForm.target_type === 'team' && !bulkForm.team_id) || (bulkForm.target_type === 'division' && !bulkForm.division_id)) {
-                    toast('لطفاً تمام فیلدها را پر کنید', 'error')
-                    return
-                  }
-                  try {
-                    const payload: Record<string, unknown> = {
-                      dashboard: bulkForm.dashboard,
-                      data_filters: bulkForm.data_filters,
-                      notes: bulkForm.notes,
+                onClick={async () => {                    if (!bulkForm.dashboard || (bulkForm.target_type === 'company' && !bulkForm.company_id) || (bulkForm.target_type === 'team' && !bulkForm.team_id) || (bulkForm.target_type === 'division' && !bulkForm.division_id)) {
+                      toast('لطفاً تمام فیلدها را پر کنید', 'error')
+                      return
                     }
-                    if (bulkForm.target_type === 'team') payload.team_id = bulkForm.team_id
-                    else payload.division_id = bulkForm.division_id
+                    try {
+                      const payload: Record<string, unknown> = {
+                        dashboard: bulkForm.dashboard,
+                        data_filters: bulkForm.data_filters,
+                        notes: bulkForm.notes,
+                      }
+                      if (bulkForm.target_type === 'company') payload.company_id = bulkForm.company_id
+                      else if (bulkForm.target_type === 'team') payload.team_id = bulkForm.team_id
+                      else payload.division_id = bulkForm.division_id
                     const res = await api.post('/dashboards/assignments/bulk/', payload)
                     toast(`تخصیص گروهی: ${res.data.created} تخصیص جدید، ${res.data.skipped} تکراری`, 'success')
                     setShowBulkModal(false)

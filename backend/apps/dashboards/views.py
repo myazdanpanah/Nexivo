@@ -18,6 +18,15 @@ from .serializers import (
 )
 
 
+def _user_can_edit_dashboard(request, dashboard):
+    """Owner, or a role in allowed_roles, or CEO/staff. False otherwise."""
+    if request.user.role == "ceo" or request.user.is_staff:
+        return True
+    if dashboard.owner_id == request.user.id:
+        return True
+    return request.user.role in (dashboard.allowed_roles or [])
+
+
 # ---- Dashboard Templates ----
 
 DASHBOARD_TEMPLATES = {
@@ -302,29 +311,38 @@ def dashboard_layout(request, pk):
 
     page_id = request.data.get("page_id")
     layout = request.data.get("layout", [])
+    # 'mobile' writes to mobile_layout; anything else (or omitted) = desktop
+    device = request.data.get("device")
+    is_mobile = device == "mobile"
 
     if page_id:
         try:
             page = DashboardPage.objects.get(pk=page_id, dashboard=dashboard)
         except DashboardPage.DoesNotExist:
             return Response({"error": "Page not found"}, status=status.HTTP_404_NOT_FOUND)
-        page.layout = layout
+        if is_mobile:
+            page.mobile_layout = layout
+        else:
+            page.layout = layout
         page.save()
     else:
+        # Legacy single-page dashboards have no mobile layout
         dashboard.layout = layout
         dashboard.save()
 
-    # Update widget positions from the layout
-    for item in layout:
-        try:
-            widget = dashboard.widgets.get(id=item.get("i"))
-            widget.grid_x = item.get("x", 0)
-            widget.grid_y = item.get("y", 0)
-            widget.grid_w = item.get("w", 6)
-            widget.grid_h = item.get("h", 4)
-            widget.save()
-        except Widget.DoesNotExist:
-            continue
+    # Update widget positions from the layout (desktop only — mobile layout is
+    # stored as a separate grid snapshot and does not rewrite grid_x/y/w/h).
+    if not is_mobile:
+        for item in layout:
+            try:
+                widget = dashboard.widgets.get(id=item.get("i"))
+                widget.grid_x = item.get("x", 0)
+                widget.grid_y = item.get("y", 0)
+                widget.grid_w = item.get("w", 6)
+                widget.grid_h = item.get("h", 4)
+                widget.save()
+            except Widget.DoesNotExist:
+                continue
 
     return Response(DashboardSerializer(dashboard).data)
 
@@ -391,8 +409,9 @@ def page_create(request, dashboard_pk):
 def page_detail(request, dashboard_pk, page_pk):
     """Retrieve, update, or delete a page."""
     try:
+        dashboard = Dashboard.objects.get(pk=dashboard_pk)
         page = DashboardPage.objects.get(pk=page_pk, dashboard_id=dashboard_pk)
-    except DashboardPage.DoesNotExist:
+    except (Dashboard.DoesNotExist, DashboardPage.DoesNotExist):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     if request.method == "GET":
@@ -406,7 +425,14 @@ def page_detail(request, dashboard_pk, page_pk):
                 )
         return Response(DashboardPageSerializer(page).data)
 
-    elif request.method == "PUT":
+    # PUT / DELETE require write access to the dashboard
+    if not _user_can_edit_dashboard(request, dashboard):
+        return Response(
+            {"error": "You do not have permission to modify this dashboard"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if request.method == "PUT":
         old_roles = list(page.allowed_roles or [])
         serializer = DashboardPageCreateSerializer(page, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -525,9 +551,16 @@ def page_reorder(request, dashboard_pk):
 def page_export(request, dashboard_pk, page_pk):
     """Export a page as JSON."""
     try:
+        dashboard = Dashboard.objects.get(pk=dashboard_pk)
         page = DashboardPage.objects.get(pk=page_pk, dashboard_id=dashboard_pk)
-    except DashboardPage.DoesNotExist:
+    except (Dashboard.DoesNotExist, DashboardPage.DoesNotExist):
         return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if not _user_can_edit_dashboard(request, dashboard):
+        return Response(
+            {"error": "You do not have permission to export this page"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     return Response(DashboardPageExportSerializer(page).data)
 
@@ -609,14 +642,30 @@ def widget_create(request, dashboard_pk):
 def widget_detail(request, dashboard_pk, widget_pk):
     """Retrieve, update, or delete a widget."""
     try:
+        dashboard = Dashboard.objects.get(pk=dashboard_pk)
         widget = Widget.objects.get(pk=widget_pk, dashboard_id=dashboard_pk)
-    except Widget.DoesNotExist:
+    except (Dashboard.DoesNotExist, Widget.DoesNotExist):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     if request.method == "GET":
+        # Read access: visible if the dashboard is shared with the user's role
+        # or the user owns/can edit it.
+        if not _user_can_edit_dashboard(request, dashboard):
+            if request.user.role not in (dashboard.allowed_roles or []):
+                return Response(
+                    {"error": "You do not have access to this dashboard"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         return Response(WidgetSerializer(widget).data)
 
-    elif request.method == "PUT":
+    # PUT / DELETE require write access
+    if not _user_can_edit_dashboard(request, dashboard):
+        return Response(
+            {"error": "You do not have permission to modify this dashboard"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if request.method == "PUT":
         serializer = WidgetCreateSerializer(widget, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -994,6 +1043,7 @@ def assignment_bulk_create(request):
         return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 
     dashboard_id = request.data.get("dashboard")
+    company_id = request.data.get("company_id")
     division_id = request.data.get("division_id")
     team_id = request.data.get("team_id")
     data_filters = request.data.get("data_filters", [])
@@ -1002,18 +1052,33 @@ def assignment_bulk_create(request):
 
     if not dashboard_id:
         return Response({"error": "dashboard is required"}, status=status.HTTP_400_BAD_REQUEST)
-    if not division_id and not team_id:
-        return Response({"error": "division_id or team_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+    if not company_id and not division_id and not team_id:
+        return Response({"error": "company_id, division_id, or team_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         dashboard = Dashboard.objects.get(pk=dashboard_id)
     except Dashboard.DoesNotExist:
         return Response({"error": "Dashboard not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from apps.accounts.models import Team as OrgTeam, Division as OrgDivision
+    from apps.accounts.models import Team as OrgTeam, Division as OrgDivision, Company as OrgCompany
+    from django.db.models import Q
 
-    # Get users from division or team
-    if team_id:
+    # Get users from company, division, or team
+    target_users = None
+    target_name = ""
+    if company_id:
+        try:
+            company = OrgCompany.objects.get(pk=company_id)
+        except OrgCompany.DoesNotExist:
+            return Response({"error": "Company not found"}, status=status.HTTP_404_NOT_FOUND)
+        # Get all users in the company (through divisions and teams)
+        division_ids = company.divisions.values_list("id", flat=True)
+        team_ids = OrgTeam.objects.filter(division_id__in=division_ids).values_list("id", flat=True)
+        target_users = company.employees.filter(
+            Q(division_id__in=division_ids) | Q(team_id__in=team_ids) | Q(division__isnull=True, team__isnull=True)
+        ).distinct()
+        target_name = company.name
+    elif team_id:
         try:
             team = OrgTeam.objects.get(pk=team_id)
         except OrgTeam.DoesNotExist:
@@ -1025,8 +1090,6 @@ def assignment_bulk_create(request):
             division = OrgDivision.objects.get(pk=division_id)
         except OrgDivision.DoesNotExist:
             return Response({"error": "Division not found"}, status=status.HTTP_404_NOT_FOUND)
-        # Get all users in the division (direct + in teams)
-        from django.db.models import Q
         team_ids = division.teams.values_list("id", flat=True)
         target_users = division.employees.filter(
             Q(team_id__in=team_ids) | Q(team__isnull=True)
@@ -1067,6 +1130,7 @@ def assignment_bulk_create(request):
         new_value={
             "data_filters": data_filters,
             "visible_pages": visible_pages,
+            "company_id": company_id,
             "division_id": division_id,
             "team_id": team_id,
         },
