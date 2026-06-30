@@ -54,6 +54,22 @@ class Division(models.Model):
         return f"{self.company.name} → {self.name}"
 
 
+class CustomRole(models.Model):
+    """Custom role created by admins for fine-grained access control."""
+    value = models.CharField(max_length=50, unique=True, help_text="Unique identifier (e.g. 'marketing')")
+    label = models.CharField(max_length=100, help_text="Display name (e.g. 'بازاریابی')")
+    color = models.CharField(max_length=50, default='bg-gray-100 text-gray-700', help_text="Tailwind color classes")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['label']
+
+    def __str__(self):
+        return f"{self.label} ({self.value})"
+
+
 class Team(models.Model):
     """A team within a division (e.g., Sales Team North, Finance Team Auditing)."""
     division = models.ForeignKey(Division, on_delete=models.CASCADE, related_name="teams")

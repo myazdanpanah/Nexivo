@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import api from '../api/client'
 import { useToast } from '../components/Toast'
-import { Plus, BarChart3, Upload, LogOut, ChevronLeft, LayoutTemplate, TrendingUp, DollarSign, Megaphone, Users, ShoppingBag, Trash2, Copy, Share2, Shield, MoreVertical, X, UserCheck, FolderTree, Network, Pencil } from 'lucide-react'
+import { Plus, BarChart3, Upload, LogOut, ChevronLeft, LayoutTemplate, TrendingUp, DollarSign, Megaphone, Users, ShoppingBag, Trash2, Copy, Share2, Shield, MoreVertical, X, UserCheck, FolderTree, Network, Pencil, Database } from 'lucide-react'
 import NotificationBell from '../components/NotificationBell'
 import ThemeToggle from '../components/ThemeToggle'
 import { ALL_ROLES } from '../utils/roles'
@@ -266,6 +266,14 @@ export default function DashboardListPage() {
             >
               <Upload className="w-4 h-4" />
               بارگذاری داده
+            </Link>
+
+            <Link
+              to="/db-manager"
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl transition"
+            >
+              <Database className="w-4 h-4" />
+              مدیریت پایگاه‌داده
             </Link>
 
             <Link

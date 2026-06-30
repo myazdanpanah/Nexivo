@@ -106,6 +106,7 @@ class Widget(models.Model):
         ("radar", "Radar Chart"),
         ("graph", "Graph/Network"),
         ("map", "Map"),
+        ("leader_kpi", "Leader KPI"),
     ]
 
     dashboard = models.ForeignKey(Dashboard, on_delete=models.CASCADE, related_name="widgets")

@@ -19,8 +19,8 @@ from .serializers import (
 
 
 def _user_can_edit_dashboard(request, dashboard):
-    """Owner, or a role in allowed_roles, or CEO/staff. False otherwise."""
-    if request.user.role == "ceo" or request.user.is_staff:
+    """Owner, or a role in allowed_roles, or CEO/Admin/staff. False otherwise."""
+    if request.user.role in ("ceo", "admin") or request.user.is_staff:
         return True
     if dashboard.owner_id == request.user.id:
         return True
@@ -272,7 +272,7 @@ def dashboard_detail(request, pk):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     # Role check
-    if request.user.role != "ceo" and not request.user.is_staff:
+    if request.user.role not in ("ceo", "admin") and not request.user.is_staff:
         if request.user.role not in dashboard.allowed_roles:
             return Response(
                 {"error": "You do not have access to this dashboard"},

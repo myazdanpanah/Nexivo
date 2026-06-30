@@ -46,6 +46,7 @@ const chartTypes = [
   { value: 'map', label: 'نقشه', icon: Map },
   { value: 'table', label: 'جدول', icon: Table },
   { value: 'kpi', label: 'شاخص کلیدی', icon: Hash },
+  { value: 'leader_kpi', label: 'برترین', icon: TrendingUp },
 ]
 
 const AGG_OPTIONS = ['SUM', 'COUNT', 'COUNT_DISTINCT', 'AVG', 'MIN', 'MAX'] as const
@@ -159,7 +160,7 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
       prevDatasetIdRef.current = selectedDatasetId
       if (selectedDataset) {
         setSelectedColumns(selectedDataset.column_names)
-        if (chartType !== 'table') {
+        if (chartType !== 'table' && chartType !== 'leader_kpi') {
           const autoMetrics: Record<string, string> = {}
           for (const col of selectedDataset.column_names) {
             const pgType = (selectedDataset.column_types[col] || '').toUpperCase()
@@ -181,7 +182,7 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
   // When chart type changes to/from table, update metrics accordingly
   useEffect(() => {
     if (!selectedDataset) return
-    if (chartType === 'table') {
+    if (chartType === 'table' || chartType === 'leader_kpi') {
       setMetrics({})
     } else {
       const autoMetrics: Record<string, string> = {}
@@ -301,7 +302,7 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
     // Color overrides
     const isPieLike = chartType === 'pie' || chartType === 'donut'
     const isBarLike = chartType === 'bar' || chartType === 'bar_horizontal' || chartType === 'stacked_bar' || chartType === 'line' || chartType === 'area'
-    const isSingle = chartType === 'kpi' || chartType === 'scatter'
+    const isSingle = chartType === 'kpi' || chartType === 'leader_kpi' || chartType === 'scatter'
     if (isBarLike && Object.keys(seriesColors).length > 0) chartConfig.seriesColors = seriesColors
     else delete chartConfig.seriesColors
     if (isPieLike && Object.keys(sliceColors).length > 0) chartConfig.sliceColors = sliceColors
@@ -420,6 +421,11 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
               {chartType === 'heatmap' && '🗺️ نقشه حرارتی: ستون اول = محور X، ستون دوم = محور Y، ستون سوم = مقدار'}
               {chartType === 'sankey' && '🔄 جریان: ستون اول = مبدأ، ستون دوم = مقصد، ستون سوم = مقدار (اختیاری)'}
               {chartType === 'graph' && '🕸️ شبکه‌ای: ستون اول = مبدأ، ستون دوم = مقصد، ستون سوم = وزن (اختیاری)'}
+            </div>
+          )}
+          {selectedDataset && selectedDataset.column_names.length > 0 && chartType === 'leader_kpi' && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl px-4 py-3 text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+              🏆 برترین: ستون اول = دسته‌بندی (مثل نام فروشنده)، سیستم به صورت خودکار تعداد را شمرده و برترین را نمایش می‌دهد
             </div>
           )}
 
@@ -788,7 +794,7 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
           </div>
 
           {/* Sort & Limit */}
-          {chartType !== 'table' && chartType !== 'kpi' && (
+          {chartType !== 'table' && chartType !== 'kpi' && chartType !== 'leader_kpi' && (
             <div className="border border-gray-200 dark:border-gray-600 rounded-xl p-4 space-y-3">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">مرتب‌سازی و محدودیت</label>
               <div className="flex gap-3">
@@ -917,7 +923,7 @@ export default function WidgetConfigPanel({ widgetId, onClose }: WidgetConfigPan
           )}
 
           {/* Single color override (kpi/scatter) */}
-          {(chartType === 'kpi' || chartType === 'scatter') && (
+          {(chartType === 'kpi' || chartType === 'leader_kpi' || chartType === 'scatter') && (
             <div className="border border-gray-200 dark:border-gray-600 rounded-xl p-4 space-y-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">رنگ</label>
               <div className="flex items-center gap-2">

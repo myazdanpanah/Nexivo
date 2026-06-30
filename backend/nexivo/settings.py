@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "apps.accounts.apps.AccountsConfig",
     "apps.datasets.apps.DatasetsConfig",
     "apps.dashboards.apps.DashboardsConfig",
+    "apps.db_manager.apps.DbManagerConfig",
 ]
 
 MIDDLEWARE = [
@@ -157,9 +158,11 @@ ROLE_FINANCE = "finance"
 ROLE_SALES = "sales"
 ROLE_CEO = "ceo"
 ROLE_ADMIN = "admin"
+ROLE_UPDATER = "updater"
 ROLE_CHOICES = [
     (ROLE_FINANCE, "Finance"),
     (ROLE_SALES, "Sales"),
     (ROLE_CEO, "CEO"),
     (ROLE_ADMIN, "Admin"),
+    (ROLE_UPDATER, "Updater"),
 ]

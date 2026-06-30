@@ -32,6 +32,8 @@ interface ChartWidgetProps {
  * Chart types that do NOT use aggregation (raw rows only).
  */
 const NO_AGG_TYPES = new Set(['table', 'sankey', 'graph'])
+/** Chart types that render as simple HTML cards (not ECharts). */
+const CARD_TYPES = new Set(['table', 'kpi', 'leader_kpi'])
 
 /**
  * Chart types where all selected columns are treated as metrics (no GROUP BY dimension).
@@ -101,6 +103,14 @@ function buildMetrics(
       return { [cols[1]]: 'SUM' }
     }
     return undefined
+  }
+
+  // Leader KPI: first column = dimension, COUNT all rows
+  if (chartType === 'leader_kpi') {
+    if (cols.length === 0) return undefined
+    // If there's a second column, COUNT it; otherwise COUNT(*) via first col
+    const countCol = cols.length > 1 ? cols[1] : cols[0]
+    return { [countCol]: 'COUNT' }
   }
 
   // Everything else: first column = dimension, rest = numeric SUM metrics
@@ -855,8 +865,9 @@ export default function ChartWidget({
   const [error, setError] = useState<string | null>(null)
   const [tableData, setTableData] = useState<{ columns: string[]; rows: Record<string, unknown>[] } | null>(null)
   const [kpiData, setKpiData] = useState<{ value: string; rawValue?: number } | null>(null)
+  const [leaderData, setLeaderData] = useState<{ name: string; value: number } | null>(null)
 
-  const usesECharts = widget.chartType !== 'table' && widget.chartType !== 'kpi'
+  const usesECharts = !CARD_TYPES.has(widget.chartType)
   const chartBgColor = (widget.chartConfig as Record<string, unknown>)?.bgColor as string | undefined
   const chartBgImage = (widget.chartConfig as Record<string, unknown>)?.bgImage as string | undefined
 
@@ -886,6 +897,7 @@ export default function ChartWidget({
   const fetchData = useCallback(async () => {
     setTableData(null)
     setKpiData(null)
+    setLeaderData(null)
     setError(null)
 
     if (usesECharts && (!chartInstance.current || chartInstance.current.isDisposed())) {
@@ -951,6 +963,22 @@ export default function ChartWidget({
 
       if (widget.chartType === 'table') {
         setTableData({ columns: result.columns, rows: result.data })
+      } else if (widget.chartType === 'leader_kpi') {
+        // Leader KPI: first column = dimension (name), last column = metric (count)
+        const dimCol = result.columns[0]
+        const valueCol = result.columns.length > 1 ? result.columns[result.columns.length - 1] : result.columns[0]
+        if (result.data.length > 0 && dimCol) {
+          let bestRow = result.data[0]
+          let bestVal = Number(bestRow[valueCol]) || 0
+          for (const row of result.data) {
+            const v = Number(row[valueCol]) || 0
+            if (v > bestVal) {
+              bestVal = v
+              bestRow = row
+            }
+          }
+          setLeaderData({ name: String(bestRow[dimCol] ?? ''), value: bestVal })
+        }
       } else if (widget.chartType === 'kpi') {
         const metricCols = Object.keys(metrics || {})
         const valueCol = metricCols[0] || result.columns[result.columns.length - 1]
@@ -1117,6 +1145,42 @@ export default function ChartWidget({
             ))}
           </tbody>
         </table>
+      </div>
+    )
+  }
+
+  if (widget.chartType === 'leader_kpi') {
+    if (error) {
+      return (
+        <div className="flex items-center justify-center h-full p-4">
+          <span className="text-sm text-red-500 text-center">خطا: {error}</span>
+        </div>
+      )
+    }
+    if (leaderData) {
+      const cfg = widget.chartConfig || {}
+      const fontConfig = readFontConfig(cfg)
+      const condColor = evalConditionalRules(readConditionalRules(cfg), leaderData.value)
+      const leaderColor = condColor || (cfg.singleColor as string) || undefined
+
+      return (
+        <div className="flex flex-col items-center justify-center h-full p-4 gap-2">
+          <span className="text-amber-500 text-3xl">🏆</span>
+          <span
+            className="font-extrabold leading-none text-indigo-600 dark:text-indigo-400"
+            style={{ fontSize: `${fontConfig.valueSize || 28}px`, color: leaderColor }}
+          >
+            {leaderData.name}
+          </span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            {formatKpiValue(leaderData.value, (cfg.kpiFormat as KpiFormat) || undefined)}
+          </span>
+        </div>
+      )
+    }
+    return (
+      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+        منبع داده تعیین نشده
       </div>
     )
   }

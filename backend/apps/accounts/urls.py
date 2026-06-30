@@ -16,4 +16,7 @@ urlpatterns = [
     path("teams/", views.team_list_create, name="team-list-create"),
     path("teams/<int:pk>/", views.team_detail, name="team-detail"),
     path("org-tree/", views.org_tree, name="org-tree"),
+    # Custom Role Management
+    path("roles/", views.role_list_create, name="role-list-create"),
+    path("roles/<int:pk>/", views.role_detail, name="role-detail"),
 ]

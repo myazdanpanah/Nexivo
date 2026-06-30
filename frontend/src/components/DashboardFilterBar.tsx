@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useDashboardStore, controlFiltersToQuery, type DashboardFilterControl } from '../store/dashboardStore'
-import { X, Plus, Filter, ChevronDown, ChevronUp, Calendar, Search, CheckSquare, Sliders, Trash2, Shield } from 'lucide-react'
+import { X, Plus, Filter, ChevronDown, ChevronUp, Calendar, Search, CheckSquare, Sliders, Trash2, Shield, RotateCcw } from 'lucide-react'
 import api from '../api/client'
 import { useAuthStore } from '../store/authStore'
 
@@ -218,83 +218,89 @@ export default function DashboardFilterBar() {
 
   const hasActiveFilters = activeControlFilters.length > 0 || filters.length > 0
 
+  // Find widget title by id for filter origin tooltip
+  const allWidgets = pages.flatMap((p) => p.widgets)
+  const getWidgetTitle = (widgetId: string) => {
+    const w = allWidgets.find((w) => w.id === widgetId)
+    return w?.title || widgetId
+  }
+
   return (
     <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700" dir="rtl">
-      {/* Filter bar header */}
-      <div className="flex items-center justify-between px-6 py-2">
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-          <span className="text-sm font-medium text-gray-600 dark:text-gray-300">فیلترها</span>
-          {hasActiveFilters && (
-            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 text-[10px] rounded-full font-medium">
-              {activeControlFilters.length + filters.length} فعال
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {(hasActiveFilters) && (
-            <button
-              onClick={() => {
-                // Clear all control values
-                setFilterControls(filterControls.map((c) => ({ ...c, value: null })))
-                clearFilters()
-              }}
-              className="text-xs text-gray-500 dark:text-gray-400 hover:text-red-500 transition"
-            >
-              پاک کردن همه
-            </button>
-          )}
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
-          >
-            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
+      {/* Filter bar header + inline active filter items */}
+      <div className="flex items-center gap-2 px-6 py-2 flex-wrap">
+        <Filter className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+        <span className="text-sm font-medium text-gray-600 dark:text-gray-300 flex-shrink-0">فیلترها</span>
 
-      {/* Active filter chips */}
-      {hasActiveFilters && !expanded && (
-        <div className="flex flex-wrap gap-1.5 px-6 pb-2">
-          {filterControls
-            .filter((c) => c.value !== null && c.value !== '' && c.value !== undefined)
-            .map((c) => (
-              <span
-                key={c.id}
-                className="flex items-center gap-1 px-2 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs border border-indigo-200 dark:border-indigo-700"
-              >
-                <span className="font-medium">{c.label}:</span>
-                <span>
-                  {c.type === 'slider' && Array.isArray(c.value)
-                    ? `${c.value[0]} – ${c.value[1]}`
-                    : c.type === 'checkbox' && Array.isArray(c.value)
-                    ? c.value.join(', ')
-                    : String(c.value)}
-                </span>
-                <button
-                  onClick={() => handleControlValueChange(c.id, null)}
-                  className="hover:text-indigo-900"
-                >
-                  <X className="w-3 h-3" />
-                </button>
+        {/* Inline active control filters — shown directly in the bar */}
+        {filterControls
+          .filter((c) => c.value !== null && c.value !== '' && c.value !== undefined)
+          .map((c) => (
+            <span
+              key={c.id}
+              className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs border border-indigo-200 dark:border-indigo-700"
+            >
+              <span className="font-medium">{c.label}:</span>
+              <span>
+                {c.type === 'slider' && Array.isArray(c.value)
+                  ? `${c.value[0]} – ${c.value[1]}`
+                  : c.type === 'checkbox' && Array.isArray(c.value)
+                  ? c.value.join(', ')
+                  : String(c.value)}
               </span>
-            ))}
-          {filters.map((f, idx) => (              <span
-                key={idx}
-                className="flex items-center gap-1 px-2 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full text-xs border border-amber-200 dark:border-amber-700"
-              >
-              <span className="font-medium">{f.col}:</span>
-              <span>{String(f.val)}</span>
               <button
-                onClick={() => removeFilter(f.col)}
-                className="hover:text-amber-900"
+                onClick={() => handleControlValueChange(c.id, null)}
+                className="hover:text-indigo-900 dark:hover:text-indigo-100 ml-0.5"
+                title="حذف فیلتر"
               >
                 <X className="w-3 h-3" />
               </button>
             </span>
           ))}
-        </div>
-      )}
+
+        {/* Inline cross-chart filters — with origin tooltip */}
+        {filters.map((f, idx) => (
+          <span
+            key={idx}
+            className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full text-xs border border-amber-200 dark:border-amber-700"
+            title={`فیلتر اعمال شده توسط: ${getWidgetTitle(f.sourceWidgetId)}`}
+          >
+            <span className="font-medium">{f.col}:</span>
+            <span>{String(f.val)}</span>
+            <button
+              onClick={() => removeFilter(f.col)}
+              className="hover:text-amber-900 dark:hover:text-amber-100 ml-0.5"
+              title="حذف فیلتر"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </span>
+        ))}
+
+        {/* Clear all button — right next to filters */}
+        {hasActiveFilters && (
+          <button
+            onClick={() => {
+              setFilterControls(filterControls.map((c) => ({ ...c, value: null })))
+              clearFilters()
+            }}
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition flex-shrink-0"
+            title="پاک کردن همه فیلترها"
+          >
+            <RotateCcw className="w-3 h-3" />
+            پاک کردن
+          </button>
+        )}
+
+        {/* Expand/collapse toggle */}
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition flex-shrink-0"
+          title={expanded ? 'بستن تنظیمات فیلتر' : 'باز کردن تنظیمات فیلتر'}
+        >
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+      </div>
 
       {/* Expanded controls */}
       {expanded && (

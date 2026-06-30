@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User
+from .models import User, CustomRole
 from .role_filters import RoleFilter  # noqa: F401 — ensures RoleFilter is discovered
 
 
@@ -14,3 +14,10 @@ class UserAdmin(BaseUserAdmin):
     add_fieldsets = BaseUserAdmin.add_fieldsets + (
         ("Role & Permissions", {"fields": ("role", "department")}),
     )
+
+
+@admin.register(CustomRole)
+class CustomRoleAdmin(admin.ModelAdmin):
+    list_display = ("label", "value", "color", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("label", "value")

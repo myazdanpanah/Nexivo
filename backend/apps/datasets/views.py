@@ -340,16 +340,21 @@ def dataset_query(request, pk):
 
         # If no explicit dimensions, two cases:
         #   1) Only date_truncs (no metrics) → use date-truncated cols as dimensions
-        #   2) All columns are metrics (e.g. KPI) → no dimensions, aggregate everything
+        #   2) All columns are metrics:
+        #      a) If ALL metrics are COUNT → treat columns as dimensions too
+        #         (leader_kpi: SELECT seller, COUNT(seller) FROM ... GROUP BY seller)
+        #      b) Otherwise → global aggregation with no GROUP BY
+        #         (KPI: SELECT SUM(revenue), SUM(quantity) FROM ...)
         if not dim_cols:
             if date_truncs and not metric_cols:
-                # Date-only grouping: all non-date columns that aren't metrics
-                # are dimensions; if none, use date_trunc columns themselves
                 dim_cols = list(date_truncs.keys())
             elif columns:
-                # All columns are metrics → aggregate with no GROUP BY
-                # (e.g., KPI chart: SELECT SUM(revenue), SUM(quantity) FROM ...)
-                dim_cols = []
+                all_count = all(metrics_map.get(c, '').upper() == 'COUNT' for c in metric_cols)
+                if all_count:
+                    # COUNT metrics: group by the column to get per-group counts
+                    dim_cols = list(metric_cols)
+                else:
+                    dim_cols = []
 
         select_parts = []
         group_by_parts = []
@@ -365,7 +370,9 @@ def dataset_query(request, pk):
                 group_by_parts.append(f'"{c}"')
         for col in metric_cols:
             func = metrics_map[col].upper()
-            alias = col
+            # When a metric column is also a dimension column, use a unique alias
+            # to avoid cursor.description returning duplicate column names
+            alias = f'{func.lower()}_{col}' if col in dim_cols else col
             if func == 'COUNT_DISTINCT':
                 select_parts.append(f'COUNT(DISTINCT "{col}") AS "{alias}"')
             else:

@@ -7,8 +7,9 @@ from .authentication import JWTAuthentication
 from .serializers import (
     LoginSerializer, RegisterSerializer, UserSerializer,
     CompanySerializer, DivisionSerializer, TeamSerializer,
+    CustomRoleSerializer,
 )
-from .models import Company, Division, Team
+from .models import Company, Division, Team, CustomRole
 
 User = get_user_model()
 
@@ -128,15 +129,22 @@ def user_detail_view(request, pk):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+        # Use serializer for proper FK validation and error reporting
+        serializer = UserSerializer(user, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        old_division = user.division_id
+        old_team = user.team_id
+
+        # Extract only mutable fields (skip read-only computed fields)
         allowed_fields = [
             "username", "email", "first_name", "last_name", "role", "department",
             "company", "division", "team", "reports_to",
         ]
-        old_division = user.division_id
-        old_team = user.team_id
         for field in allowed_fields:
-            if field in request.data:
-                setattr(user, field, request.data[field])
+            if field in serializer.validated_data:
+                setattr(user, field, serializer.validated_data[field])
         user.save()
 
         # Auto-assignment: when a user is added to a division or team,
@@ -144,28 +152,32 @@ def user_detail_view(request, pk):
         # replicate them for the new user.
         new_division = user.division_id
         new_team = user.team_id
-        if (new_division and new_division != old_division) or (new_team and new_team != old_team):
-            from apps.dashboards.models import DashboardAssignment, Dashboard
-            existing_assignments = DashboardAssignment.objects.filter(
-                is_active=True,
-            ).filter(
-                models.Q(assigned_to__division_id=new_division) | models.Q(assigned_to__team_id=new_team)
-            ).values_list('dashboard_id', 'data_filters', 'visible_pages').distinct()
-            assigned_dash_ids = set()
-            for dash_id, d_filters, v_pages in existing_assignments:
-                if dash_id not in assigned_dash_ids:
-                    DashboardAssignment.objects.get_or_create(
-                        dashboard_id=dash_id,
-                        assigned_to=user,
-                        defaults={
-                            "assigned_by": request.user,
-                            "data_filters": d_filters or [],
-                            "visible_pages": v_pages or [],
-                            "notes": f"خودکار: اضافه شده به ساختار سازمانی",
-                            "is_active": True,
-                        },
-                    )
-                    assigned_dash_ids.add(dash_id)
+        try:
+            if (new_division and new_division != old_division) or (new_team and new_team != old_team):
+                from apps.dashboards.models import DashboardAssignment
+                existing_assignments = DashboardAssignment.objects.filter(
+                    is_active=True,
+                ).filter(
+                    models.Q(assigned_to__division_id=new_division) | models.Q(assigned_to__team_id=new_team)
+                ).values_list('dashboard_id', 'data_filters', 'visible_pages').distinct()
+                assigned_dash_ids = set()
+                for dash_id, d_filters, v_pages in existing_assignments:
+                    if dash_id not in assigned_dash_ids:
+                        DashboardAssignment.objects.get_or_create(
+                            dashboard_id=dash_id,
+                            assigned_to=user,
+                            defaults={
+                                "assigned_by": request.user,
+                                "data_filters": d_filters or [],
+                                "visible_pages": v_pages or [],
+                                "notes": f"خودکار: اضافه شده به ساختار سازمانی",
+                                "is_active": True,
+                            },
+                        )
+                        assigned_dash_ids.add(dash_id)
+        except Exception:
+            # Auto-assignment is best-effort; don't fail the user update if it errors
+            pass
 
         return Response(UserSerializer(user).data)
 
@@ -361,3 +373,43 @@ def org_tree(request):
         })
 
     return Response(result)
+
+
+# ---- Custom Role Management (admin/CEO only) ----
+
+@api_view(["GET", "POST"])
+def role_list_create(request):
+    """List all custom roles or create a new one (admin/CEO only)."""
+    if not _is_admin_or_ceo(request.user):
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == "GET":
+        roles = CustomRole.objects.filter(is_active=True)
+        return Response(CustomRoleSerializer(roles, many=True).data)
+    elif request.method == "POST":
+        serializer = CustomRoleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET", "PUT", "DELETE"])
+def role_detail(request, pk):
+    """Retrieve, update, or delete a custom role (admin/CEO only)."""
+    if not _is_admin_or_ceo(request.user):
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        role = CustomRole.objects.get(pk=pk)
+    except CustomRole.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "GET":
+        return Response(CustomRoleSerializer(role).data)
+    elif request.method == "PUT":
+        serializer = CustomRoleSerializer(role, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+    elif request.method == "DELETE":
+        role.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

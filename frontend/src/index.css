@@ -137,6 +137,80 @@ html[dir="rtl"] .react-resizable-handle:active::after {
   }
 }
 
+/* Tablet and smaller screens */
+@media (max-width: 1024px) {
+  .react-grid-layout-wrapper {
+    padding: 0 0.5rem;
+  }
+}
+
+/* Ensure charts fill their container properly */
+.react-grid-item > div {
+  width: 100%;
+  height: 100%;
+}
+
+/* Snap-to-grid visual guide — uses ::before so it doesn't hide chart content */
+.react-grid-layout.layout {
+  position: relative;
+}
+
+.react-grid-layout.layout::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent calc(60px - 1px),
+      rgba(99, 102, 241, 0.08) calc(60px - 1px),
+      rgba(99, 102, 241, 0.08) 60px
+    );
+  background-size: 100% 60px;
+  background-position: 0 -1px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 0;
+}
+
+/* Show grid lines when any widget is being dragged or resized */
+.react-grid-layout.layout.is-dragging::before {
+  opacity: 1;
+}
+
+/* Highlight row being dragged over */
+.react-grid-item.react-draggable-dragging {
+  z-index: 100;
+}
+
+/* Resize handle visual hint */
+.react-grid-item:hover .react-resizable-handle::after {
+  border-color: rgba(99, 102, 241, 0.7);
+}
+
+/* Smooth snap animation when widgets settle into constrained positions */
+.react-grid-item.react-grid-placeholder {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.react-grid-item:not(.react-draggable-dragging):not(.react-resizable-resizing) {
+  transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              top 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Undo/Redo toast — slide from right */
+@keyframes toast-slide {
+  from { opacity: 0; transform: translateX(100%) scale(0.95); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+.toast-undo {
+  animation: toast-slide 0.3s ease-out;
+}
+
 /* Widget card transitions */
 .widget-card {
   transition: box-shadow 0.2s ease, transform 0.2s ease;

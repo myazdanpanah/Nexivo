@@ -58,6 +58,14 @@ export interface DashboardFilterControl {
   allowedRoles?: string[]
 }
 
+/** Snapshot of layout state for undo/redo. */
+interface LayoutSnapshot {
+  layouts: Array<{ pageId: string; layout: GridItem[]; mobileLayout: GridItem[] }>
+  timestamp: number
+}
+
+const MAX_HISTORY = 50
+
 interface DashboardState {
   dashboardId: number | null
   dashboardName: string
@@ -71,8 +79,17 @@ interface DashboardState {
   filters: DashboardFilter[]
   // Dashboard-level filter controls (persistent, user-configured)
   filterControls: DashboardFilterControl[]
+  // Undo/redo history
+  undoStack: LayoutSnapshot[]
+  redoStack: LayoutSnapshot[]
+  canUndo: boolean
+  canRedo: boolean
+  undo: () => void
+  redo: () => void
+  pushLayoutSnapshot: () => void
   setFilter: (filter: DashboardFilter) => void
   removeFilter: (col: string) => void
+  removeCrossFilter: (col: string, sourceWidgetId: string) => void
   clearFilters: () => void
   setFilterControls: (controls: DashboardFilterControl[]) => void
   addFilterControl: (control: DashboardFilterControl) => void
@@ -205,6 +222,10 @@ export const useDashboardStore = create<DashboardState>()(
         set((state) => ({
           filters: state.filters.filter((f) => f.col !== col),
         })),
+      removeCrossFilter: (col, sourceWidgetId) =>
+        set((state) => ({
+          filters: state.filters.filter((f) => !(f.col === col && f.sourceWidgetId === sourceWidgetId)),
+        })),
       clearFilters: () => set({ filters: [] }),
       setFilterControls: (controls) => set({ filterControls: controls }),
       addFilterControl: (control) =>
@@ -223,7 +244,7 @@ export const useDashboardStore = create<DashboardState>()(
         })),
       // Page operations
       setPages: (pages) => set({ pages }),
-      setActivePage: (pageId) => set({ activePageId: pageId }),
+      setActivePage: (pageId) => set({ activePageId: pageId, undoStack: [], redoStack: [], canUndo: false, canRedo: false }),
       addPage: (page) =>
         set((state) => ({
           pages: [...state.pages, page],
@@ -244,6 +265,87 @@ export const useDashboardStore = create<DashboardState>()(
               : state.activePageId
           return { pages: newPages, activePageId: newActiveId }
         }),
+      undoStack: [],
+      redoStack: [],
+      canUndo: false,
+      canRedo: false,
+      pushLayoutSnapshot: () =>
+        set((state) => {
+          const snapshot: LayoutSnapshot = {
+            layouts: state.pages.map((p) => ({
+              pageId: p.id,
+              layout: [...p.layout],
+              mobileLayout: [...(p.mobileLayout || [])],
+            })),
+            timestamp: Date.now(),
+          }
+          const undoStack = [...state.undoStack, snapshot].slice(-MAX_HISTORY)
+          return { undoStack, redoStack: [], canUndo: true, canRedo: false }
+        }),
+      undo: () =>
+        set((state) => {
+          if (state.undoStack.length === 0) return state
+          // Save current state to redo stack
+          const currentSnapshot: LayoutSnapshot = {
+            layouts: state.pages.map((p) => ({
+              pageId: p.id,
+              layout: [...p.layout],
+              mobileLayout: [...(p.mobileLayout || [])],
+            })),
+            timestamp: Date.now(),
+          }
+          const redoStack = [...state.redoStack, currentSnapshot]
+          // Pop the last snapshot
+          const newUndoStack = [...state.undoStack]
+          const snapshot = newUndoStack.pop()!
+          // Restore pages from snapshot
+          const pages = state.pages.map((p) => {
+            const snap = snapshot.layouts.find((s) => s.pageId === p.id)
+            if (snap) {
+              return { ...p, layout: snap.layout, mobileLayout: snap.mobileLayout }
+            }
+            return p
+          })
+          return {
+            pages,
+            undoStack: newUndoStack,
+            redoStack,
+            canUndo: newUndoStack.length > 0,
+            canRedo: true,
+          }
+        }),
+      redo: () =>
+        set((state) => {
+          if (state.redoStack.length === 0) return state
+          // Save current state to undo stack
+          const currentSnapshot: LayoutSnapshot = {
+            layouts: state.pages.map((p) => ({
+              pageId: p.id,
+              layout: [...p.layout],
+              mobileLayout: [...(p.mobileLayout || [])],
+            })),
+            timestamp: Date.now(),
+          }
+          const undoStack = [...state.undoStack, currentSnapshot]
+          // Pop the next snapshot
+          const newRedoStack = [...state.redoStack]
+          const snapshot = newRedoStack.pop()!
+          // Restore pages from snapshot
+          const pages = state.pages.map((p) => {
+            const snap = snapshot.layouts.find((s) => s.pageId === p.id)
+            if (snap) {
+              return { ...p, layout: snap.layout, mobileLayout: snap.mobileLayout }
+            }
+            return p
+          })
+          return {
+            pages,
+            undoStack,
+            redoStack: newRedoStack,
+            canUndo: true,
+            canRedo: newRedoStack.length > 0,
+          }
+        }),
       reset: () =>
         set({
           dashboardId: null,
@@ -254,6 +356,10 @@ export const useDashboardStore = create<DashboardState>()(
           widgets: [],
           filters: [],
           filterControls: [],
+          undoStack: [],
+          redoStack: [],
+          canUndo: false,
+          canRedo: false,
         }),
     }),
     {

@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import api from '../api/client'
 import { useToast } from '../components/Toast'
-import { ArrowRight, Users, Pencil, Trash2, X, Shield, UserPlus, Trash, History, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowRight, Users, Pencil, Trash2, X, Shield, UserPlus, Trash, History, ChevronDown, ChevronUp, Plus, Tag } from 'lucide-react'
 import { ALL_ROLES, ROLE_MAP } from '../utils/roles'
 
 interface User {
@@ -71,7 +71,10 @@ export default function AdminSettingsPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [clearing, setClearing] = useState(false)
-  const [activeTab, setActiveTab] = useState<'users' | 'audit'>('users')
+  const [activeTab, setActiveTab] = useState<'users' | 'audit' | 'roles'>('users')
+  const [customRoles, setCustomRoles] = useState<Array<{ id: number; value: string; label: string; color: string }>>([])
+  const [showRoleModal, setShowRoleModal] = useState(false)
+  const [editingRole, setEditingRole] = useState<{ id?: number; value: string; label: string; color: string }>({ value: '', label: '', color: 'bg-gray-100 text-gray-700' })
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [auditLoading, setAuditLoading] = useState(true)
   const [expandedLog, setExpandedLog] = useState<number | null>(null)
@@ -79,6 +82,8 @@ export default function AdminSettingsPage() {
   const [divisions, setDivisions] = useState<OrgDivision[]>([])
   const [teams, setTeams] = useState<OrgTeam[]>([])
   const [allUsers, setAllUsers] = useState<User[]>([])
+  const [openRoleDropdown, setOpenRoleDropdown] = useState(false)
+  const roleDropdownRef = useRef<HTMLDivElement>(null)
   const [form, setForm] = useState({
     username: '',
     email: '',
@@ -101,7 +106,20 @@ export default function AdminSettingsPage() {
     fetchUsers()
     fetchAuditLogs()
     fetchOrgData()
+    fetchCustomRoles()
   }, [user, navigate])
+
+  // Close role dropdown on outside click
+  useEffect(() => {
+    if (!openRoleDropdown) return
+    const handler = (e: MouseEvent) => {
+      if (roleDropdownRef.current && !roleDropdownRef.current.contains(e.target as Node)) {
+        setOpenRoleDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [openRoleDropdown])
 
   const fetchOrgData = async () => {
     try {
@@ -115,6 +133,13 @@ export default function AdminSettingsPage() {
       setDivisions(divRes.data)
       setTeams(teamRes.data)
       setAllUsers(userRes.data)
+    } catch { /* ignore */ }
+  }
+
+  const fetchCustomRoles = async () => {
+    try {
+      const res = await api.get('/auth/roles/')
+      setCustomRoles(res.data)
     } catch { /* ignore */ }
   }
 
@@ -231,6 +256,60 @@ export default function AdminSettingsPage() {
     }
   }
 
+  const handleRoleSubmit = async () => {
+    if (!editingRole.value || !editingRole.label) {
+      toast('شناسه و نام نقش الزامی است', 'error')
+      return
+    }
+    try {
+      if (editingRole.id) {
+        await api.put(`/auth/roles/${editingRole.id}/`, {
+          value: editingRole.value,
+          label: editingRole.label,
+          color: editingRole.color,
+        })
+        toast('نقش به‌روزرسانی شد', 'success')
+      } else {
+        await api.post('/auth/roles/', {
+          value: editingRole.value,
+          label: editingRole.label,
+          color: editingRole.color,
+        })
+        toast('نقش جدید ساخته شد', 'success')
+      }
+      setShowRoleModal(false)
+      setEditingRole({ value: '', label: '', color: 'bg-gray-100 text-gray-700' })
+      fetchCustomRoles()
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } }
+      toast(axiosErr.response?.data?.error || 'خطا در ذخیره نقش', 'error')
+    }
+  }
+
+  const handleDeleteRole = async (roleId: number) => {
+    if (!window.confirm('آیا از حذف این نقش اطمینان دارید؟')) return
+    try {
+      await api.delete(`/auth/roles/${roleId}/`)
+      toast('نقش حذف شد', 'success')
+      fetchCustomRoles()
+    } catch {
+      toast('خطا در حذف نقش', 'error')
+    }
+  }
+
+  const COLOR_OPTIONS = [
+    'bg-gray-100 text-gray-700',
+    'bg-purple-100 text-purple-700',
+    'bg-blue-100 text-blue-700',
+    'bg-emerald-100 text-emerald-700',
+    'bg-amber-100 text-amber-700',
+    'bg-red-100 text-red-700',
+    'bg-indigo-100 text-indigo-700',
+    'bg-pink-100 text-pink-700',
+    'bg-teal-100 text-teal-700',
+    'bg-orange-100 text-orange-700',
+  ]
+
   const handleClearAll = async () => {
     if (!window.confirm('⚠️ آیا از حذف تمام داشبوردها و داده‌ها اطمینان دارید؟ این عمل غیرقابل بازگشت است.')) return
     if (!window.confirm('⚠️ این آخرین هشدار است! تمام داده‌ها حذف خواهند شد. تایید کنید:')) return
@@ -327,6 +406,9 @@ export default function AdminSettingsPage() {
           </button>
           <button onClick={() => setActiveTab('audit')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${activeTab === 'audit' ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
             <History className="w-4 h-4" /> تاریخچه تغییرات
+          </button>
+          <button onClick={() => setActiveTab('roles')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${activeTab === 'roles' ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+            <Tag className="w-4 h-4" /> مدیریت نقش‌ها
           </button>
         </div>
 
@@ -463,9 +545,144 @@ export default function AdminSettingsPage() {
             )}
           </div>
         )}
+        {/* Roles Management */}
+        {activeTab === 'roles' && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+              <h2 className="font-bold text-gray-900 dark:text-gray-100">مدیریت نقش‌ها</h2>
+              <button
+                onClick={() => { setEditingRole({ value: '', label: '', color: 'bg-gray-100 text-gray-700' }); setShowRoleModal(true) }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 transition"
+              >
+                <Plus className="w-3.5 h-3.5" /> نقش جدید
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Built-in roles */}
+              <div>
+                <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">نقش‌های پیش‌فرض</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {ALL_ROLES.map((r) => (
+                    <div key={r.value} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${r.color}`}>
+                        <Shield className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{r.label}</p>
+                        <p className="text-[10px] text-gray-400">{r.value}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Custom roles */}
+              <div>
+                <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">نقش‌های سفارشی</h3>
+                {customRoles.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Tag className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">هنوز نقش سفارشی ایجاد نشده</p>
+                    <button
+                      onClick={() => { setEditingRole({ value: '', label: '', color: 'bg-gray-100 text-gray-700' }); setShowRoleModal(true) }}
+                      className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                    >+ ایجاد نقش جدید</button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {customRoles.map((r) => (
+                      <div key={r.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600 group">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${r.color}`}>
+                          <Tag className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{r.label}</p>
+                          <p className="text-[10px] text-gray-400">{r.value}</p>
+                        </div>
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                          <button
+                            onClick={() => { setEditingRole(r); setShowRoleModal(true) }}
+                            className="p-1 text-gray-400 hover:text-indigo-500 rounded transition"
+                          ><Pencil className="w-3 h-3" /></button>
+                          <button
+                            onClick={() => handleDeleteRole(r.id)}
+                            className="p-1 text-gray-400 hover:text-red-500 rounded transition"
+                          ><Trash2 className="w-3 h-3" /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
-      {/* Create/Edit Modal */}
+      {/* Role Create/Edit Modal */}
+      {showRoleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" dir="rtl">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowRoleModal(false)} />
+          <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+              <h3 className="font-bold text-gray-900 dark:text-gray-100">{editingRole.id ? 'ویرایش نقش' : 'نقش جدید'}</h3>
+              <button onClick={() => setShowRoleModal(false)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">شناسه نقش (انگلیسی) *</label>
+                <input
+                  type="text"
+                  value={editingRole.value}
+                  onChange={(e) => setEditingRole({ ...editingRole, value: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                  placeholder="مثلاً: marketing, hr, it"
+                  disabled={!!editingRole.id}
+                />
+                <p className="text-[10px] text-gray-400 mt-1">فقط حروف انگلیسی، عدد و خط زیر</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">نام نمایشی (فارسی) *</label>
+                <input
+                  type="text"
+                  value={editingRole.label}
+                  onChange={(e) => setEditingRole({ ...editingRole, label: e.target.value })}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                  placeholder="مثلاً: بازاریابی، منابع انسانی"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">رنگ</label>
+                <div className="flex flex-wrap gap-2">
+                  {COLOR_OPTIONS.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setEditingRole({ ...editingRole, color: c })}
+                      className={`w-8 h-8 rounded-lg ${c} flex items-center justify-center transition ring-2 ${editingRole.color === c ? 'ring-indigo-500 ring-offset-2' : 'ring-transparent'}`}
+                    >
+                      <Tag className="w-3.5 h-3.5" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl">
+                <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">پیش‌نمایش:</p>
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium mt-1 ${editingRole.color}`}>
+                  <Tag className="w-3.5 h-3.5" />
+                  {editingRole.label || 'نام نقش'}
+                </span>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-end gap-3">
+              <button onClick={() => setShowRoleModal(false)} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition">انصراف</button>
+              <button onClick={handleRoleSubmit} className="px-6 py-2 bg-indigo-600 text-white text-sm rounded-xl hover:bg-indigo-700 transition font-medium">
+                {editingRole.id ? 'ذخیره تغییرات' : 'ساخت نقش'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create/Edit User Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" dir="rtl">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowModal(false)} />
@@ -498,13 +715,85 @@ export default function AdminSettingsPage() {
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">نقش *</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {ROLE_OPTIONS.map((r) => (
-                    <button key={r.value} type="button" onClick={() => setForm({ ...form, role: r.value })} className={`p-3 rounded-xl border-2 text-sm font-medium transition ${form.role === r.value ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'}`}>
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
+                {/* Graphical dropdown for role selection */}
+                {(() => {
+                  const allRoleOptions = [
+                    ...ROLE_OPTIONS,
+                    ...customRoles.map((cr) => ({ value: cr.value, label: cr.label, color: cr.color })),
+                  ]
+                  const selectedRole = allRoleOptions.find((r) => r.value === form.role)
+                  return (
+                    <div className="relative" ref={roleDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenRoleDropdown(!openRoleDropdown)}
+                        className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 text-sm hover:border-indigo-400 transition focus:ring-2 focus:ring-indigo-500 outline-none"
+                      >
+                        <div className="flex items-center gap-2">
+                          {selectedRole ? (
+                            <>
+                              <span className={`inline-flex px-2 py-0.5 rounded-lg text-xs font-medium ${selectedRole.color}`}>{selectedRole.label}</span>
+                              <span className="text-[10px] text-gray-400">({selectedRole.value})</span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">انتخاب نقش...</span>
+                          )}
+                        </div>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${openRoleDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {openRoleDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl z-50 p-3 max-h-60 overflow-y-auto">
+                          {/* Built-in roles section */}
+                          <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">نقش‌های پیش‌فرض</p>
+                          <div className="grid grid-cols-2 gap-1.5 mb-3">
+                            {ROLE_OPTIONS.map((r) => (
+                              <button
+                                key={r.value}
+                                type="button"
+                                onClick={() => { setForm({ ...form, role: r.value }); setOpenRoleDropdown(false) }}
+                                className={`flex items-center gap-2 p-2 rounded-lg text-sm font-medium transition ${
+                                  form.role === r.value
+                                    ? 'bg-indigo-50 dark:bg-indigo-900/30 ring-2 ring-indigo-500 text-indigo-700 dark:text-indigo-300'
+                                    : 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
+                                }`}
+                              >
+                                <span className={`w-6 h-6 rounded-md flex items-center justify-center ${r.color}`}>
+                                  <Shield className="w-3 h-3" />
+                                </span>
+                                <span>{r.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                          {/* Custom roles section */}
+                          {customRoles.length > 0 && (
+                            <>
+                              <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">نقش‌های سفارشی</p>
+                              <div className="grid grid-cols-2 gap-1.5">
+                                {customRoles.map((cr) => (
+                                  <button
+                                    key={cr.value}
+                                    type="button"
+                                    onClick={() => { setForm({ ...form, role: cr.value }); setOpenRoleDropdown(false) }}
+                                    className={`flex items-center gap-2 p-2 rounded-lg text-sm font-medium transition ${
+                                      form.role === cr.value
+                                        ? 'bg-indigo-50 dark:bg-indigo-900/30 ring-2 ring-indigo-500 text-indigo-700 dark:text-indigo-300'
+                                        : 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
+                                    }`}
+                                  >
+                                    <span className={`w-6 h-6 rounded-md flex items-center justify-center ${cr.color}`}>
+                                      <Tag className="w-3 h-3" />
+                                    </span>
+                                    <span>{cr.label}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
 
               <div>
