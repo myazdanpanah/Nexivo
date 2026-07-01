@@ -139,6 +139,7 @@ JWT_EXPIRATION_HOURS = 24
 SUPERSET_API_URL = config("SUPERSET_API_URL", default="http://superset:8088/api/v1")
 SUPERSET_USERNAME = config("SUPERSET_USERNAME", default="admin")
 SUPERSET_PASSWORD = config("SUPERSET_PASSWORD", default="admin")
+SUPERSET_DEFAULT_DATABASE_ID = config("SUPERSET_DEFAULT_DATABASE_ID", default=1, cast=int)
 
 # Redis / Celery
 REDIS_URL = config("REDIS_URL", default="redis://redis:6379/0")

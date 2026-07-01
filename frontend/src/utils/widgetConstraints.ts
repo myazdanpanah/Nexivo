@@ -31,6 +31,7 @@ const CONSTRAINTS: Record<string, WidgetSizeConstraints> = {
   radar:         { minW: 3, minH: 3, maxW: 8, maxH: 8 },
   graph:         { minW: 4, minH: 4, maxW: 12, maxH: 10 },
   map:           { minW: 4, minH: 4, maxW: 12, maxH: 10 },
+  leader_kpi:    { minW: 2, minH: 2, maxW: 6, maxH: 4 },
   table:         { minW: 3, minH: 3, maxW: 12, maxH: 12 },
 }
 

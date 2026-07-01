@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 
@@ -10,6 +11,8 @@ from .models import Dataset, DataFilter
 from apps.dashboards.models import DashboardAssignment, PermissionAuditLog
 from .serializers import DatasetSerializer, DatasetUploadSerializer
 from .parsers import parse_excel_file, generate_table_name, create_table_from_dataframe
+
+logger = logging.getLogger(__name__)
 
 
 @api_view(["GET"])
@@ -25,6 +28,22 @@ def dataset_list(request):
 
     serializer = DatasetSerializer(datasets, many=True)
     return Response(serializer.data)
+
+
+def _register_in_superset(dataset):
+    """Register a dataset in Superset. Best-effort — failures are logged but don't block upload."""
+    try:
+        from .superset import superset_client
+        superset_dataset_id = superset_client.register_dataset(
+            database_id=getattr(settings, "SUPERSET_DEFAULT_DATABASE_ID", 1),
+            table_name=dataset.table_name,
+        )
+        dataset.superset_dataset_id = superset_dataset_id
+        dataset.save(update_fields=["superset_dataset_id"])
+        logger.info("Registered dataset '%s' in Superset (id=%s)", dataset.name, superset_dataset_id)
+    except Exception as exc:
+        # Superset may not be running — log and continue
+        logger.warning("Failed to register dataset '%s' in Superset: %s", dataset.name, exc)
 
 
 @api_view(["POST"])
@@ -67,9 +86,8 @@ def dataset_upload(request):
             owner=request.user,
         )
 
-        # TODO: Register dataset in Superset via API
-        # from .superset import superset_client
-        # superset_dataset_id = superset_client.register_dataset(...)
+        # Register dataset in Superset (best-effort, non-blocking)
+        _register_in_superset(dataset)
 
         return Response(
             DatasetSerializer(dataset).data,
@@ -416,3 +434,124 @@ def dataset_query(request, pk):
         "row_count": len(data),
         "filters_applied": [f"{f.column_name} {f.operator}={f.value}" for f in filters],
     })
+
+
+# ---- Superset Health Check & Sync ----
+
+@api_view(["GET"])
+def superset_health(request):
+    """
+    Check Superset connectivity and report sync status of all datasets.
+    Returns: { status, superset_url, datasets: [{id, name, synced, superset_id}] }
+    """
+    if request.user.role not in ("ceo", "admin") and not request.user.is_staff:
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+    result = {
+        "status": "ok",
+        "superset_url": getattr(settings, "SUPERSET_API_URL", ""),
+        "datasets": [],
+    }
+
+    try:
+        from .superset import superset_client
+        # Test connectivity by listing datasets
+        remote_datasets = superset_client.get_datasets()
+        remote_tables = {d.get("table_name"): d.get("id") for d in remote_datasets}
+
+        local_datasets = Dataset.objects.filter(status="ready")
+        for ds in local_datasets:
+            remote_id = remote_tables.get(ds.table_name)
+            result["datasets"].append({
+                "id": ds.id,
+                "name": ds.name,
+                "table_name": ds.table_name,
+                "synced": remote_id is not None,
+                "superset_dataset_id": ds.superset_dataset_id,
+                "remote_superset_id": remote_id,
+            })
+    except Exception as exc:
+        result["status"] = "error"
+        result["error"] = str(exc)
+        logger.warning("Superset health check failed: %s", exc)
+
+    return Response(result)
+
+
+@api_view(["POST"])
+def superset_sync_dataset(request, pk):
+    """
+    Sync a single dataset to Superset (register if missing, update if exists).
+    """
+    if request.user.role not in ("ceo", "admin") and not request.user.is_staff:
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        dataset = Dataset.objects.get(pk=pk)
+    except Dataset.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        from .superset import superset_client
+        if dataset.superset_dataset_id:
+            # Already registered — just confirm
+            return Response({
+                "status": "already_synced",
+                "superset_dataset_id": dataset.superset_dataset_id,
+            })
+        # Register now
+        superset_dataset_id = superset_client.register_dataset(
+            database_id=getattr(settings, "SUPERSET_DEFAULT_DATABASE_ID", 1),
+            table_name=dataset.table_name,
+        )
+        dataset.superset_dataset_id = superset_dataset_id
+        dataset.save(update_fields=["superset_dataset_id"])
+        return Response({
+            "status": "synced",
+            "superset_dataset_id": superset_dataset_id,
+        })
+    except Exception as exc:
+        logger.warning("Superset sync failed for dataset '%s': %s", dataset.name, exc)
+        return Response(
+            {"error": f"Sync failed: {exc}"},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+
+@api_view(["POST"])
+def superset_sync_all(request):
+    """
+    Bulk-sync all unsynced datasets to Superset in one call.
+    Returns: { synced: int, skipped: int, errors: [...] }
+    """
+    if request.user.role not in ("ceo", "admin") and not request.user.is_staff:
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+    unsynced = Dataset.objects.filter(status="ready", superset_dataset_id__isnull=True)
+    synced_count = 0
+    skipped_count = 0
+    errors = []
+
+    try:
+        from .superset import superset_client
+        for ds in unsynced:
+            try:
+                superset_dataset_id = superset_client.register_dataset(
+                    database_id=getattr(settings, "SUPERSET_DEFAULT_DATABASE_ID", 1),
+                    table_name=ds.table_name,
+                )
+                ds.superset_dataset_id = superset_dataset_id
+                ds.save(update_fields=["superset_dataset_id"])
+                synced_count += 1
+            except Exception as exc:
+                errors.append({"dataset_id": ds.id, "name": ds.name, "error": str(exc)})
+    except Exception as exc:
+        # Superset client init failed — everything is an error
+        for ds in unsynced:
+            errors.append({"dataset_id": ds.id, "name": ds.name, "error": str(exc)})
+
+    return Response({
+        "synced": synced_count,
+        "skipped": Dataset.objects.filter(status="ready").exclude(superset_dataset_id__isnull=True).count(),
+        "errors": errors,
+    }, status=status.HTTP_200_OK)

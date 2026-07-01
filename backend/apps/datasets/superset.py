@@ -106,33 +106,20 @@ class SupersetClient:
         response.raise_for_status()
         return response.json()["token"]
 
-    def query_chart_data(self, dataset_id: int, columns: list, metrics: list, filters: list | None = None) -> dict:
+    def sync_rls(self, dataset_id: int, rls_filters: list[dict]) -> None:
         """
-        Query chart data from Superset using the Chart Data API.
-        Returns raw query results.
+        Sync row-level security (RLS) rules for a dataset in Superset.
+        Each rule: {"clause": "column = 'value'"}
         """
         self._ensure_auth()
-
-        payload = {
-            "datasource": {"id": dataset_id, "type": "table"},
-            "queries": [
-                {
-                    "columns": columns,
-                    "metrics": metrics,
-                    "row_limit": 10000,
-                }
-            ],
-        }
-
-        if filters:
-            payload["queries"][0]["filters"] = filters
-
-        response = self.session.post(
-            f"{self.base_url}/chart/data",
-            json=payload,
+        response = self.session.put(
+            f"{self.base_url}/dataset/{dataset_id}/",
+            json={
+                "sqlalchemy_uri": None,  # Don't touch the connection
+                "rls": rls_filters,
+            },
         )
         response.raise_for_status()
-        return response.json()
 
 
 # Singleton instance

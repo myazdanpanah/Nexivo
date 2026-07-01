@@ -15,6 +15,7 @@ import SqlEditorPage from './pages/SqlEditorPage'
 import FileImportPage from './pages/FileImportPage'
 import ExternalDbPage from './pages/ExternalDbPage'
 import SheetsSyncPage from './pages/SheetsSyncPage'
+import SupersetHealthPage from './pages/SupersetHealthPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token)
@@ -40,6 +41,7 @@ export default function App() {
       <Route path="/db-manager/sql" element={<PrivateRoute><SqlEditorPage /></PrivateRoute>} />
       <Route path="/db-manager/syncs" element={<PrivateRoute><SheetsSyncPage /></PrivateRoute>} />
       <Route path="/db-manager/connections" element={<PrivateRoute><ExternalDbPage /></PrivateRoute>} />
+      <Route path="/admin/superset" element={<PrivateRoute><SupersetHealthPage /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/dashboards" replace />} />
     </Routes>
   )

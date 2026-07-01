@@ -35,13 +35,8 @@ export default function DashboardBuilderPage() {
   // Compute active control filters from filterControls state
   const controlFilters = controlFiltersToQuery(filterControls)
 
-  // Load per-page filter controls when active page changes
-  useEffect(() => {
-    if (activePage) {
-      setFilterControls(activePage.filterControls || [])
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePageId])
+  // Derived: active page (must be declared before effects that reference it)
+  const activePage = pages.find((p) => p.id === activePageId)
   const { toast } = useToast()
   const currentUser = useAuthStore((s) => s.user)
   const canEdit = currentUser && ['admin', 'ceo', 'finance', 'sales'].includes(currentUser.role)
@@ -81,14 +76,13 @@ export default function DashboardBuilderPage() {
     return localStorage.getItem('nexivo_silent_refresh') === 'true'
   })
 
+  // Load per-page filter controls when active page changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (id) loadDashboard(parseInt(id))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
-
-  // Auto-refresh dashboard at configured interval, preserving the active page
-  const activePageIdRef = useRef(activePageId)
-  activePageIdRef.current = activePageId
+    if (activePage) {
+      setFilterControls(activePage.filterControls || [])
+    }
+  }, [activePageId])
   const refreshIntervalRef = useRef(refreshInterval)
   refreshIntervalRef.current = refreshInterval
   const silentRefreshRef = useRef(silentRefresh)
@@ -183,7 +177,7 @@ export default function DashboardBuilderPage() {
     }
   }, [])
 
-  const loadDashboard = async (dashboardId: number, restorePageId?: string | null) => {
+  const loadDashboard = useCallback(async (dashboardId: number, restorePageId?: string | null) => {
     try {
       const res = await api.get(`/dashboards/${dashboardId}/`)
       setDashboard(res.data.id, res.data.name)
@@ -280,10 +274,16 @@ export default function DashboardBuilderPage() {
     } catch {
       // ignore
     }
-  }
+  }, []) // stable Zustand setters don't change
 
-  // Get active page data
-  const activePage = pages.find((p) => p.id === activePageId)
+  // Activate loadDashboard effect
+  useEffect(() => {
+    if (id) loadDashboard(parseInt(id))
+  }, [id, loadDashboard])
+
+  // Auto-refresh dashboard at configured interval, preserving the active page
+  const activePageIdRef = useRef(activePageId)
+  activePageIdRef.current = activePageId
   const currentPageWidgets = activePage?.widgets || widgets
   // Effective device: builder override beats viewport auto-detection.
   const editingMobile = deviceMode === 'mobile' || (deviceMode === 'auto' && isMobile)

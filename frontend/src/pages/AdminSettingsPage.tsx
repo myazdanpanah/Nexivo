@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import api from '../api/client'
 import { useToast } from '../components/Toast'
-import { ArrowRight, Users, Pencil, Trash2, X, Shield, UserPlus, Trash, History, ChevronDown, ChevronUp, Plus, Tag } from 'lucide-react'
+import { ArrowRight, Users, Pencil, Trash2, X, Shield, UserPlus, Trash, History, ChevronDown, ChevronUp, Plus, Tag, Database } from 'lucide-react'
 import { ALL_ROLES, ROLE_MAP } from '../utils/roles'
 
 interface User {
@@ -410,6 +410,9 @@ export default function AdminSettingsPage() {
           <button onClick={() => setActiveTab('roles')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${activeTab === 'roles' ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
             <Tag className="w-4 h-4" /> مدیریت نقش‌ها
           </button>
+          <Link to="/admin/superset" className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+            <Database className="w-4 h-4" /> وضعیت Superset
+          </Link>
         </div>
 
         {/* Users Table */}

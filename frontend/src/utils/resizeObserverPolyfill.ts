@@ -74,6 +74,7 @@ if (typeof window !== 'undefined' && typeof window.ResizeObserver === 'undefined
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  window.ResizeObserver = ResizeObserverShim as any
+  // ResizeObserverShim implements the ResizeObserver interface (observe, unobserve, disconnect)
+  // but doesn't perfectly match the constructor signature — safe to cast here.
+  window.ResizeObserver = ResizeObserverShim as unknown as typeof ResizeObserver
 }
