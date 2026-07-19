@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "drf_spectacular",
     # Local apps
+    "apps.core.apps.CoreConfig",
     "apps.accounts.apps.AccountsConfig",
     "apps.datasets.apps.DatasetsConfig",
     "apps.dashboards.apps.DashboardsConfig",

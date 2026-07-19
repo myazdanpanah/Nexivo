@@ -5,8 +5,7 @@ All endpoints gated by the 'finance' module. Notifications endpoints are ungated
 """
 
 import logging
-from django.db.models import Sum, Q, F
-from django.utils import timezone
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -26,6 +25,14 @@ from .serializers import (
     JournalVoucherSerializer, JournalVoucherCreateSerializer, JournalEntrySerializer,
     InvoiceSerializer, InvoiceCreateSerializer, InvoiceItemSerializer,
     ReceiptSerializer, PaymentSerializer, ChequeSerializer,
+)
+from .services import (
+    ValidationError, FiscalYearService, JournalService,
+    InvoiceService, ReceiptService, PaymentService, ChequeService,
+)
+from .selectors import (
+    AccountSelector, CustomerSelector, SupplierSelector,
+    FinanceDashboardSelector, JournalSelector, InvoiceSelector,
 )
 
 logger = logging.getLogger(__name__)
@@ -363,7 +370,7 @@ def journal_voucher_list(request):
             if not fy:
                 return Response(
                     {"error": "No open fiscal year found. Create one first."},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 )
             fy_id = fy.id
         data = request.data.copy()
@@ -410,7 +417,7 @@ def journal_voucher_detail(request, pk):
 
 @api_view(["POST"])
 def journal_voucher_confirm(request, pk):
-    """Confirm a journal voucher (sets status to 'confirmed')."""
+    """Confirm a journal voucher — delegates to JournalService."""
     gate = _check_finance_module(request)
     if gate:
         return gate
@@ -418,23 +425,11 @@ def journal_voucher_confirm(request, pk):
         voucher = JournalVoucher.objects.get(pk=pk, company=request.user.company)
     except JournalVoucher.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
-    if voucher.status != "draft":
-        return Response(
-            {"error": "Only draft vouchers can be confirmed"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    # Validate debit == credit
-    total_debit = voucher.entries.aggregate(s=Sum("debit"))["s"] or 0
-    total_credit = voucher.entries.aggregate(s=Sum("credit"))["s"] or 0
-    if total_debit != total_credit:
-        return Response(
-            {"error": f"Debit ({total_debit}) ≠ Credit ({total_credit}) — cannot confirm"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    voucher.status = "confirmed"
-    voucher.confirmed_by = request.user
-    voucher.save(update_fields=["status", "confirmed_by", "updated_at"])
-    return Response(JournalVoucherSerializer(voucher).data)
+    try:
+        voucher = JournalService.confirm_voucher(voucher, request.user)
+        return Response(JournalVoucherSerializer(voucher).data)
+    except ValidationError as e:
+        return Response({"error": str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
 
 # ─── Invoices (Factor) ───────────────────────────────────────────
@@ -463,7 +458,7 @@ def invoice_list(request):
         if not fy:
             return Response(
                 {"error": "No open fiscal year found. Create one first."},
-                status=status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
         data = request.data.copy()
         data["company"] = company.id
@@ -512,7 +507,7 @@ def invoice_detail(request, pk):
 
 @api_view(["POST"])
 def invoice_confirm(request, pk):
-    """Confirm an invoice and update customer/supplier balance."""
+    """Confirm an invoice — delegates to InvoiceService."""
     gate = _check_finance_module(request)
     if gate:
         return gate
@@ -520,35 +515,11 @@ def invoice_confirm(request, pk):
         invoice = Invoice.objects.get(pk=pk, company=request.user.company)
     except Invoice.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
-    if invoice.status == "confirmed":
-        return Response(InvoiceSerializer(invoice).data)  # idempotent
-    if invoice.status != "draft":
-        return Response(
-            {"error": "Only draft invoices can be confirmed"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    invoice.status = "confirmed"
-    invoice.save(update_fields=["status", "updated_at"])
-
-    # Update customer/supplier balance
-    if invoice.customer and invoice.type == "sales":
-        Customer.objects.filter(pk=invoice.customer_id).update(
-            balance=F("balance") + invoice.total
-        )
-    elif invoice.customer and invoice.type == "sales_return":
-        Customer.objects.filter(pk=invoice.customer_id).update(
-            balance=F("balance") - invoice.total
-        )
-    elif invoice.supplier and invoice.type == "purchase":
-        Supplier.objects.filter(pk=invoice.supplier_id).update(
-            balance=F("balance") + invoice.total
-        )
-    elif invoice.supplier and invoice.type == "purchase_return":
-        Supplier.objects.filter(pk=invoice.supplier_id).update(
-            balance=F("balance") - invoice.total
-        )
-
-    return Response(InvoiceSerializer(invoice).data)
+    try:
+        invoice = InvoiceService.confirm_invoice(invoice, request.user)
+        return Response(InvoiceSerializer(invoice).data)
+    except ValidationError as e:
+        return Response({"error": str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
 
 # ─── Receipts (Daryaft / واریزی) ────────────────────────────────
@@ -738,74 +709,14 @@ def cheque_detail(request, pk):
 
 @api_view(["GET"])
 def finance_summary(request):
-    """Return a financial summary for the current company."""
+    """Return a financial summary — delegates to FinanceDashboardSelector."""
     gate = _check_finance_module(request)
     if gate:
         return gate
-    company = request.user.company
-    fy = FiscalYear.objects.filter(company=company, is_closed=False).first()
-    if not fy:
-        return Response({
-            "fiscal_year": None,
-            "total_sales": 0,
-            "total_purchases": 0,
-            "total_receipts": 0,
-            "total_payments": 0,
-            "open_cheques_received": 0,
-            "open_cheques_issued": 0,
-            "bank_balance": 0,
-            "customers_count": 0,
-            "suppliers_count": 0,
-        })
-
-    total_sales = (
-        Invoice.objects.filter(company=company, fiscal_year=fy, type="sales", status="confirmed")
-        .aggregate(s=Sum("total"))["s"]
-        or 0
-    )
-    total_purchases = (
-        Invoice.objects.filter(company=company, fiscal_year=fy, type="purchase", status="confirmed")
-        .aggregate(s=Sum("total"))["s"]
-        or 0
-    )
-    total_receipts = (
-        Receipt.objects.filter(company=company, fiscal_year=fy, status="confirmed")
-        .aggregate(s=Sum("amount"))["s"]
-        or 0
-    )
-    total_payments = (
-        Payment.objects.filter(company=company, fiscal_year=fy, status="confirmed")
-        .aggregate(s=Sum("amount"))["s"]
-        or 0
-    )
-    open_cheques_received = (
-        Cheque.objects.filter(company=company, cheque_type="received", status="pending")
-        .aggregate(s=Sum("amount"))["s"]
-        or 0
-    )
-    open_cheques_issued = (
-        Cheque.objects.filter(company=company, cheque_type="issued", status="pending")
-        .aggregate(s=Sum("amount"))["s"]
-        or 0
-    )
-    bank_balance = (
-        BankAccount.objects.filter(company=company, is_active=True)
-        .aggregate(s=Sum("current_balance"))["s"]
-        or 0
-    )
-
-    return Response({
-        "fiscal_year": FiscalYearSerializer(fy).data,
-        "total_sales": total_sales,
-        "total_purchases": total_purchases,
-        "total_receipts": total_receipts,
-        "total_payments": total_payments,
-        "open_cheques_received": open_cheques_received,
-        "open_cheques_issued": open_cheques_issued,
-        "bank_balance": bank_balance,
-        "customers_count": Customer.objects.filter(company=company, is_active=True).count(),
-        "suppliers_count": Supplier.objects.filter(company=company, is_active=True).count(),
-    })
+    summary = FinanceDashboardSelector.get_summary(request.user.company)
+    fy = summary.pop("fiscal_year", None)
+    summary["fiscal_year"] = FiscalYearSerializer(fy).data if fy else None
+    return Response(summary)
 
 
 @api_view(["GET"])

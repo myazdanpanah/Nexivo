@@ -26,7 +26,6 @@ class AccountGroup(models.Model):
     code = models.CharField(max_length=1, help_text="1-digit group code (1-5)")
     name = models.CharField(max_length=100, help_text="e.g. دارایی‌ها (Assets)")
     name_en = models.CharField(max_length=100, blank=True, default="")
-
     class Meta:
         unique_together = [("company", "code")]
         ordering = ["code"]

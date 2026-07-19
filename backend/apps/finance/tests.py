@@ -318,7 +318,7 @@ class JournalVoucherTests(TestCase):
         voucher_id = create_resp.data["id"]
         confirm_url = reverse("voucher-confirm", args=[voucher_id])
         response = self.client.post(confirm_url)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
 
 
 class ChequeTests(TestCase):
