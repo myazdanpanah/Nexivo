@@ -18,6 +18,7 @@ import ExternalDbPage from './pages/ExternalDbPage'
 import SheetsSyncPage from './pages/SheetsSyncPage'
 import SupersetHealthPage from './pages/SupersetHealthPage'
 import LLMSettingsPage from './pages/LLMSettingsPage'
+import RoadmapPage from './pages/RoadmapPage'
 // Finance module
 import FinanceLayout from './pages/finance/FinanceLayout'
 import FinanceDashboard from './pages/finance/FinanceDashboard'
@@ -75,6 +76,8 @@ export default function App() {
         <Route path="suppliers" element={<SuppliersPage />} />
         <Route path="vouchers" element={<VouchersPage />} />
       </Route>
+      {/* Roadmap */}
+      <Route path="/roadmap" element={<PrivateRoute><RoadmapPage /></PrivateRoute>} />
       {/* Fallback → launcher */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

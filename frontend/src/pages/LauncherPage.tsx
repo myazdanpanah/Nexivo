@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast'
 import api from '../api/client'
 import {
   BarChart3, DollarSign, Users, Database, Upload,
-  Settings, ArrowLeft, LogOut, Zap
+  Settings, ArrowLeft, LogOut, Zap, Map
 } from 'lucide-react'
 
 interface ModuleInfo {
@@ -185,8 +185,17 @@ export default function LauncherPage() {
       {/* Footer */}
       <footer className="border-t border-gray-700/50 px-6 py-3">
         <div className="max-w-6xl mx-auto flex items-center justify-between text-xs text-gray-500">
-          <span>Nexivo v0.1.0</span>
-          <span>پلتفرم سازمان هوشمند</span>
+          <span>Nexivo v0.4.0</span>
+          <div className="flex items-center gap-4">
+            <span>پلتفرم سازمان هوشمند</span>
+            <button
+              onClick={() => navigate('/roadmap')}
+              className="text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1"
+            >
+              <Map className="w-3 h-3" />
+              نقشه راه
+            </button>
+          </div>
         </div>
       </footer>
     </div>
