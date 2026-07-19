@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useToast } from '../components/Toast'
+import { useLogout } from '../hooks/useLogout'
 import api from '../api/client'
 import {
   BarChart3, DollarSign, Users, Database, Upload,
@@ -50,8 +51,9 @@ const MODULE_DESCRIPTIONS: Record<string, string> = {
 }
 
 export default function LauncherPage() {
-  const { user, logout } = useAuthStore()
+  const { user } = useAuthStore()
   const navigate = useNavigate()
+  const handleLogout = useLogout()
   const { toast } = useToast()
   const [modules, setModules] = useState<ModuleInfo[]>([])
   const [loading, setLoading] = useState(true)
@@ -78,11 +80,6 @@ export default function LauncherPage() {
     } else {
       toast(`ماژول ${moduleId} هنوز فعال نیست`, 'error')
     }
-  }
-
-  const handleLogout = () => {
-    logout()
-    navigate('/login')
   }
 
   return (

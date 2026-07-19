@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuthStore } from '../store/authStore'
+import { useLogout } from '../hooks/useLogout'
 import {
   BarChart3, DollarSign, Users, Database, Upload, Settings, Zap,
   GitBranch, Briefcase, Package, FolderKanban, FileText,
@@ -308,28 +308,30 @@ const STATUS_CONFIG = {
 const CATEGORIES = ['همه', ...Array.from(new Set(ROADMAP_ITEMS.map((i) => i.category)))]
 
 export default function RoadmapPage() {
-  const { logout } = useAuthStore()
   const navigate = useNavigate()
+  const handleLogout = useLogout()
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
   const [selectedCategory, setSelectedCategory] = useState<string>('همه')
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
 
-  const filteredItems = ROADMAP_ITEMS.filter((item) => {
-    if (selectedStatus !== 'all' && item.status !== selectedStatus) return false
-    if (selectedCategory !== 'همه' && item.category !== selectedCategory) return false
-    return true
-  })
+  const filteredItems = useMemo(
+    () =>
+      ROADMAP_ITEMS.filter((item) => {
+        if (selectedStatus !== 'all' && item.status !== selectedStatus) return false
+        if (selectedCategory !== 'همه' && item.category !== selectedCategory) return false
+        return true
+      }),
+    [selectedStatus, selectedCategory]
+  )
 
-  const statusCounts = {
-    implemented: ROADMAP_ITEMS.filter((i) => i.status === 'implemented').length,
-    'in-progress': ROADMAP_ITEMS.filter((i) => i.status === 'in-progress').length,
-    planned: ROADMAP_ITEMS.filter((i) => i.status === 'planned').length,
-  }
-
-  const handleLogout = () => {
-    logout()
-    navigate('/login')
-  }
+  const statusCounts = useMemo(
+    () => ({
+      implemented: ROADMAP_ITEMS.filter((i) => i.status === 'implemented').length,
+      'in-progress': ROADMAP_ITEMS.filter((i) => i.status === 'in-progress').length,
+      planned: ROADMAP_ITEMS.filter((i) => i.status === 'planned').length,
+    }),
+    []
+  )
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
