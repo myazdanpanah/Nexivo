@@ -17,13 +17,13 @@ from django.db import transaction
 from django.db.models import Sum, Q, F
 from django.utils import timezone
 
-from apps.finance.models import (
+from .models import (
     KolAccount, MoinAccount, TafziliAccount,
     JournalVoucher, JournalEntry,
     FiscalYear, Customer, Supplier, BankAccount,
     Invoice, InvoiceItem, Receipt, Payment,
 )
-from apps.finance.exceptions import ValidationError
+from .exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -80,41 +80,51 @@ class PostingEngine:
         entries = []
 
         if invoice.type == "sales":
-            # Debit: Customer Receivable
+            # Debit: Customer Receivable (131)
+            customer_tafzili = invoice.customer.tafzili if invoice.customer else None
             entries.append({
+                "kol": KolAccount.objects.filter(company=company, code="131").first(),
+                "tafzili": customer_tafzili,
                 "description": f"فاکتور فروش شماره {invoice.number}",
                 "debit": invoice.total,
                 "credit": 0,
             })
-            # Credit: Sales Revenue
+            # Credit: Sales Revenue (401)
             entries.append({
+                "kol": KolAccount.objects.filter(company=company, code="401").first(),
                 "description": f"درآمد فروش فاکتور {invoice.number}",
                 "debit": 0,
                 "credit": invoice.subtotal,
             })
-            # Credit: VAT Payable
+            # Credit: VAT Payable (341)
             if invoice.tax_amount > 0:
                 entries.append({
+                    "kol": KolAccount.objects.filter(company=company, code="341").first(),
                     "description": f"مالیات بر ارزش افزوده فاکتور {invoice.number}",
                     "debit": 0,
                     "credit": invoice.tax_amount,
                 })
         elif invoice.type == "purchase":
-            # Debit: Inventory / Expense
+            # Debit: Inventory / Expense (111)
             entries.append({
+                "kol": KolAccount.objects.filter(company=company, code="111").first(),
                 "description": f"خرید فاکتور شماره {invoice.number}",
                 "debit": invoice.subtotal,
                 "credit": 0,
             })
-            # Debit: Input VAT
+            # Debit: Input VAT (133)
             if invoice.tax_amount > 0:
                 entries.append({
+                    "kol": KolAccount.objects.filter(company=company, code="133").first(),
                     "description": f"مالیات پرداختی فاکتور {invoice.number}",
                     "debit": invoice.tax_amount,
                     "credit": 0,
                 })
-            # Credit: Supplier Payable
+            # Credit: Supplier Payable (231)
+            supplier_tafzili = invoice.supplier.tafzili if invoice.supplier else None
             entries.append({
+                "kol": KolAccount.objects.filter(company=company, code="231").first(),
+                "tafzili": supplier_tafzili,
                 "description": f"بدهی به تأمین‌کننده فاکتور {invoice.number}",
                 "debit": 0,
                 "credit": invoice.total,
@@ -138,9 +148,18 @@ class PostingEngine:
             confirmed_by=user,
         )
 
-        # Create journal entries
+        # Create journal entries — each must reference a Kol account
         for entry_data in entries:
-            JournalEntry.objects.create(voucher=voucher, **entry_data)
+            kol = entry_data.pop("kol", None)
+            moin = entry_data.pop("moin", None)
+            tafzili = entry_data.pop("tafzili", None)
+            JournalEntry.objects.create(
+                voucher=voucher,
+                kol=kol,
+                moin=moin,
+                tafzili=tafzili,
+                **entry_data,
+            )
 
         # Link voucher to invoice
         invoice.journal_voucher = voucher
@@ -183,16 +202,22 @@ class PostingEngine:
             confirmed_by=user,
         )
 
-        # Debit: Bank / Cash
+        # Debit: Bank / Cash (use bank account's tafzili if available)
+        bank_tafzili = receipt.bank_account.tafzili if receipt.bank_account else None
         JournalEntry.objects.create(
             voucher=voucher,
+            kol=KolAccount.objects.filter(company=company, code="102").first(),  # Bank Kol
+            tafzili=bank_tafzili,
             description=f"واریز به حساب بانکی - رسید {receipt.number}",
             debit=receipt.amount,
             credit=0,
         )
-        # Credit: Customer Receivable
+        # Credit: Customer Receivable (use customer's tafzili if available)
+        customer_tafzili = receipt.customer.tafzili if receipt.customer else None
         JournalEntry.objects.create(
             voucher=voucher,
+            kol=KolAccount.objects.filter(company=company, code="131").first(),  # Customer Receivable Kol
+            tafzili=customer_tafzili,
             description=f"دریافت از مشتری - رسید {receipt.number}",
             debit=0,
             credit=receipt.amount,
@@ -238,16 +263,22 @@ class PostingEngine:
             confirmed_by=user,
         )
 
-        # Debit: Supplier Payable
+        # Debit: Supplier Payable (use supplier's tafzili if available)
+        supplier_tafzili = payment.supplier.tafzili if payment.supplier else None
         JournalEntry.objects.create(
             voucher=voucher,
+            kol=KolAccount.objects.filter(company=company, code="231").first(),  # Supplier Payable Kol
+            tafzili=supplier_tafzili,
             description=f"پرداخت به تأمین‌کننده - پرداختی {payment.number}",
             debit=payment.amount,
             credit=0,
         )
-        # Credit: Bank / Cash
+        # Credit: Bank / Cash (use bank account's tafzili if available)
+        bank_tafzili = payment.bank_account.tafzili if payment.bank_account else None
         JournalEntry.objects.create(
             voucher=voucher,
+            kol=KolAccount.objects.filter(company=company, code="102").first(),  # Bank Kol
+            tafzili=bank_tafzili,
             description=f"برداشت از حساب بانکی - پرداختی {payment.number}",
             debit=0,
             credit=payment.amount,
