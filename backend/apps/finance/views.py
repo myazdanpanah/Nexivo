@@ -2,6 +2,9 @@
 Finance Module Views — Iranian Accounting System (Sepidar-style)
 
 All endpoints gated by the 'finance' module. Notifications endpoints are ungated.
+
+Per API_SPECIFICATION.md §6-§8: All responses use standard format.
+Per DJANGO_BACKEND.md §23: Views delegate to services/selectors.
 """
 
 import logging
@@ -11,6 +14,11 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from apps.accounts.permissions import RequireModule
+from apps.core.responses import (
+    success_response, error_response, validation_error_response,
+    business_rule_error, not_found_response, forbidden_response,
+    paginated_response,
+)
 
 from .models import (
     AccountGroup, KolAccount, MoinAccount, TafziliAccount,
@@ -34,6 +42,7 @@ from .selectors import (
     AccountSelector, CustomerSelector, SupplierSelector,
     FinanceDashboardSelector, JournalSelector, InvoiceSelector,
 )
+from .posting import LedgerService
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +53,7 @@ _FinancePerm = RequireModule.for_module("finance")()
 def _check_finance_module(request):
     """Return None if OK, or a 403 Response if the module is not enabled."""
     if not _FinancePerm.has_permission(request, None):
-        return Response(
-            {"error": "Module 'finance' is not enabled for your company"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
+        return forbidden_response("Module 'finance' is not enabled for your company")
     return None
 
 
@@ -61,13 +67,19 @@ def fiscal_year_list(request):
         return gate
     if request.method == "GET":
         years = FiscalYear.objects.filter(company=request.user.company)
-        return Response(FiscalYearSerializer(years, many=True).data)
+        return success_response(
+            data=FiscalYearSerializer(years, many=True).data,
+        )
     elif request.method == "POST":
         data = request.data.copy()
         serializer = FiscalYearSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(company=request.user.company)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        fy = serializer.save(company=request.user.company)
+        return success_response(
+            data=FiscalYearSerializer(fy).data,
+            message="Fiscal year created",
+            http_status_code=status.HTTP_201_CREATED,
+        )
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -79,14 +91,14 @@ def fiscal_year_detail(request, pk):
     try:
         fy = FiscalYear.objects.get(pk=pk, company=request.user.company)
     except FiscalYear.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return not_found_response("Fiscal year not found")
     if request.method == "GET":
-        return Response(FiscalYearSerializer(fy).data)
+        return success_response(data=FiscalYearSerializer(fy).data)
     elif request.method == "PUT":
         serializer = FiscalYearSerializer(fy, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+        fy = serializer.save()
+        return success_response(data=FiscalYearSerializer(fy).data)
     elif request.method == "DELETE":
         fy.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -102,13 +114,17 @@ def account_group_list(request):
         return gate
     if request.method == "GET":
         groups = AccountGroup.objects.filter(company=request.user.company)
-        return Response(AccountGroupSerializer(groups, many=True).data)
+        return success_response(data=AccountGroupSerializer(groups, many=True).data)
     elif request.method == "POST":
         data = request.data.copy()
         serializer = AccountGroupSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(company=request.user.company)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        group = serializer.save(company=request.user.company)
+        return success_response(
+            data=AccountGroupSerializer(group).data,
+            message="Account group created",
+            http_status_code=status.HTTP_201_CREATED,
+        )
 
 
 @api_view(["GET"])
@@ -121,7 +137,7 @@ def kol_account_list(request):
     group_id = request.query_params.get("group")
     if group_id:
         qs = qs.filter(group_id=group_id)
-    return Response(KolAccountSerializer(qs, many=True).data)
+    return success_response(data=KolAccountSerializer(qs, many=True).data)
 
 
 @api_view(["GET"])
@@ -134,7 +150,7 @@ def moin_account_list(request):
     kol_id = request.query_params.get("kol")
     if kol_id:
         qs = qs.filter(kol_id=kol_id)
-    return Response(MoinAccountSerializer(qs, many=True).data)
+    return success_response(data=MoinAccountSerializer(qs, many=True).data)
 
 
 @api_view(["GET"])
@@ -147,7 +163,7 @@ def tafzili_account_list(request):
     entity_type = request.query_params.get("entity_type")
     if entity_type:
         qs = qs.filter(entity_type=entity_type)
-    return Response(TafziliAccountSerializer(qs, many=True).data)
+    return success_response(data=TafziliAccountSerializer(qs, many=True).data)
 
 
 # ─── Chart of Accounts Tree (flat) ──────────────────────────────
@@ -205,7 +221,7 @@ def chart_of_accounts_tree(request):
             "name": grp.name,
             "kols": kol_list,
         })
-    return Response(tree)
+    return success_response(data=tree)
 
 
 # ─── Bank Accounts ───────────────────────────────────────────────
@@ -218,13 +234,17 @@ def bank_account_list(request):
         return gate
     if request.method == "GET":
         accounts = BankAccount.objects.filter(company=request.user.company)
-        return Response(BankAccountSerializer(accounts, many=True).data)
+        return success_response(data=BankAccountSerializer(accounts, many=True).data)
     elif request.method == "POST":
         data = request.data.copy()
         serializer = BankAccountSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(company=request.user.company)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        ba = serializer.save(company=request.user.company)
+        return success_response(
+            data=BankAccountSerializer(ba).data,
+            message="Bank account created",
+            http_status_code=status.HTTP_201_CREATED,
+        )
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -236,14 +256,14 @@ def bank_account_detail(request, pk):
     try:
         ba = BankAccount.objects.get(pk=pk, company=request.user.company)
     except BankAccount.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return not_found_response("Bank account not found")
     if request.method == "GET":
-        return Response(BankAccountSerializer(ba).data)
+        return success_response(data=BankAccountSerializer(ba).data)
     elif request.method == "PUT":
         serializer = BankAccountSerializer(ba, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+        ba = serializer.save()
+        return success_response(data=BankAccountSerializer(ba).data)
     elif request.method == "DELETE":
         ba.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -264,13 +284,17 @@ def customer_list(request):
             customers = customers.filter(
                 Q(name__icontains=q) | Q(national_id__icontains=q)
             )
-        return Response(CustomerSerializer(customers, many=True).data)
+        return success_response(data=CustomerSerializer(customers, many=True).data)
     elif request.method == "POST":
         data = request.data.copy()
         serializer = CustomerSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(company=request.user.company)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        customer = serializer.save(company=request.user.company)
+        return success_response(
+            data=CustomerSerializer(customer).data,
+            message="Customer created",
+            http_status_code=status.HTTP_201_CREATED,
+        )
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -282,14 +306,14 @@ def customer_detail(request, pk):
     try:
         c = Customer.objects.get(pk=pk, company=request.user.company)
     except Customer.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return not_found_response("Customer not found")
     if request.method == "GET":
-        return Response(CustomerSerializer(c).data)
+        return success_response(data=CustomerSerializer(c).data)
     elif request.method == "PUT":
         serializer = CustomerSerializer(c, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+        c = serializer.save()
+        return success_response(data=CustomerSerializer(c).data)
     elif request.method == "DELETE":
         c.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -310,13 +334,17 @@ def supplier_list(request):
             suppliers = suppliers.filter(
                 Q(name__icontains=q) | Q(national_id__icontains=q)
             )
-        return Response(SupplierSerializer(suppliers, many=True).data)
+        return success_response(data=SupplierSerializer(suppliers, many=True).data)
     elif request.method == "POST":
         data = request.data.copy()
         serializer = SupplierSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(company=request.user.company)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        supplier = serializer.save(company=request.user.company)
+        return success_response(
+            data=SupplierSerializer(supplier).data,
+            message="Supplier created",
+            http_status_code=status.HTTP_201_CREATED,
+        )
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -328,14 +356,14 @@ def supplier_detail(request, pk):
     try:
         s = Supplier.objects.get(pk=pk, company=request.user.company)
     except Supplier.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return not_found_response("Supplier not found")
     if request.method == "GET":
-        return Response(SupplierSerializer(s).data)
+        return success_response(data=SupplierSerializer(s).data)
     elif request.method == "PUT":
         serializer = SupplierSerializer(s, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+        s = serializer.save()
+        return success_response(data=SupplierSerializer(s).data)
     elif request.method == "DELETE":
         s.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -360,37 +388,21 @@ def journal_voucher_list(request):
         status_filter = request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
-        return Response(JournalVoucherSerializer(qs, many=True).data)
+        return success_response(data=JournalVoucherSerializer(qs, many=True).data)
 
     elif request.method == "POST":
-        # Auto-resolve fiscal_year from current open FY if not provided
-        fy_id = request.data.get("fiscal_year")
-        if not fy_id:
-            fy = FiscalYear.objects.filter(company=company, is_closed=False).first()
-            if not fy:
-                return Response(
-                    {"error": "No open fiscal year found. Create one first."},
-                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                )
-            fy_id = fy.id
         data = request.data.copy()
         data["company"] = company.id
-        data["fiscal_year"] = fy_id
         data["created_by"] = request.user.id
-        # Auto-assign next voucher number per fiscal year
-        last = JournalVoucher.objects.filter(
-            company=company, fiscal_year_id=fy_id
-        ).order_by("-number").first()
-        data["number"] = (last.number + 1) if last else 1
-        serializer = JournalVoucherCreateSerializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        voucher = serializer.save(
-            company=company, fiscal_year_id=fy_id, created_by=request.user
-        )
-        return Response(
-            JournalVoucherSerializer(voucher).data,
-            status=status.HTTP_201_CREATED,
-        )
+        try:
+            voucher = JournalService.create_voucher(company, request.user, data)
+            return success_response(
+                data=JournalVoucherSerializer(voucher).data,
+                message="Voucher created",
+                http_status_code=status.HTTP_201_CREATED,
+            )
+        except ValidationError as e:
+            return business_rule_error(str(e))
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -402,14 +414,14 @@ def journal_voucher_detail(request, pk):
     try:
         voucher = JournalVoucher.objects.get(pk=pk, company=request.user.company)
     except JournalVoucher.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return not_found_response("Journal voucher not found")
     if request.method == "GET":
-        return Response(JournalVoucherSerializer(voucher).data)
+        return success_response(data=JournalVoucherSerializer(voucher).data)
     elif request.method == "PUT":
         serializer = JournalVoucherCreateSerializer(voucher, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         voucher = serializer.save()
-        return Response(JournalVoucherSerializer(voucher).data)
+        return success_response(data=JournalVoucherSerializer(voucher).data)
     elif request.method == "DELETE":
         voucher.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -424,12 +436,15 @@ def journal_voucher_confirm(request, pk):
     try:
         voucher = JournalVoucher.objects.get(pk=pk, company=request.user.company)
     except JournalVoucher.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return not_found_response("Journal voucher not found")
     try:
         voucher = JournalService.confirm_voucher(voucher, request.user)
-        return Response(JournalVoucherSerializer(voucher).data)
+        return success_response(
+            data=JournalVoucherSerializer(voucher).data,
+            message="Voucher confirmed",
+        )
     except ValidationError as e:
-        return Response({"error": str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        return business_rule_error(str(e))
 
 
 # ─── Invoices (Factor) ───────────────────────────────────────────
@@ -441,7 +456,6 @@ def invoice_list(request):
     if gate:
         return gate
     company = request.user.company
-    fy = FiscalYear.objects.filter(company=company, is_closed=False).first()
     if request.method == "GET":
         qs = Invoice.objects.filter(company=company).select_related(
             "fiscal_year", "customer", "supplier", "created_by"
@@ -452,35 +466,21 @@ def invoice_list(request):
         status_filter = request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
-        return Response(InvoiceSerializer(qs, many=True).data)
+        return success_response(data=InvoiceSerializer(qs, many=True).data)
 
     elif request.method == "POST":
-        if not fy:
-            return Response(
-                {"error": "No open fiscal year found. Create one first."},
-                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            )
         data = request.data.copy()
         data["company"] = company.id
-        data["fiscal_year"] = fy.id
         data["created_by"] = request.user.id
-        # Auto-assign next number
-        invoice_type = data.get("type", "sales")
-        last = (
-            Invoice.objects.filter(company=company, fiscal_year=fy, type=invoice_type)
-            .order_by("-number")
-            .first()
-        )
-        data["number"] = (last.number + 1) if last else 1
-        serializer = InvoiceCreateSerializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        invoice = serializer.save(
-            company=company, fiscal_year=fy, created_by=request.user
-        )
-        return Response(
-            InvoiceSerializer(invoice).data,
-            status=status.HTTP_201_CREATED,
-        )
+        try:
+            invoice = InvoiceService.create_invoice(company, request.user, data)
+            return success_response(
+                data=InvoiceSerializer(invoice).data,
+                message="Invoice created",
+                http_status_code=status.HTTP_201_CREATED,
+            )
+        except ValidationError as e:
+            return business_rule_error(str(e))
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -492,14 +492,14 @@ def invoice_detail(request, pk):
     try:
         invoice = Invoice.objects.get(pk=pk, company=request.user.company)
     except Invoice.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return not_found_response("Invoice not found")
     if request.method == "GET":
-        return Response(InvoiceSerializer(invoice).data)
+        return success_response(data=InvoiceSerializer(invoice).data)
     elif request.method == "PUT":
         serializer = InvoiceCreateSerializer(invoice, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         invoice = serializer.save()
-        return Response(InvoiceSerializer(invoice).data)
+        return success_response(data=InvoiceSerializer(invoice).data)
     elif request.method == "DELETE":
         invoice.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -514,12 +514,15 @@ def invoice_confirm(request, pk):
     try:
         invoice = Invoice.objects.get(pk=pk, company=request.user.company)
     except Invoice.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return not_found_response("Invoice not found")
     try:
         invoice = InvoiceService.confirm_invoice(invoice, request.user)
-        return Response(InvoiceSerializer(invoice).data)
+        return success_response(
+            data=InvoiceSerializer(invoice).data,
+            message="Invoice confirmed and posted to general ledger",
+        )
     except ValidationError as e:
-        return Response({"error": str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        return business_rule_error(str(e))
 
 
 # ─── Receipts (Daryaft / واریزی) ────────────────────────────────
@@ -531,37 +534,24 @@ def receipt_list(request):
     if gate:
         return gate
     company = request.user.company
-    fy = FiscalYear.objects.filter(company=company, is_closed=False).first()
     if request.method == "GET":
         qs = Receipt.objects.filter(company=company).select_related(
             "fiscal_year", "customer", "bank_account", "created_by"
         )
-        return Response(ReceiptSerializer(qs, many=True).data)
+        return success_response(data=ReceiptSerializer(qs, many=True).data)
     elif request.method == "POST":
-        if not fy:
-            return Response(
-                {"error": "No open fiscal year found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        # Company-scope FKs: validate customer and bank_account belong to this company
-        customer_id = request.data.get("customer")
-        bank_account_id = request.data.get("bank_account")
-        if customer_id and not Customer.objects.filter(pk=customer_id, company=company).exists():
-            return Response({"error": "Customer not found in your company"}, status=status.HTTP_400_BAD_REQUEST)
-        if bank_account_id and not BankAccount.objects.filter(pk=bank_account_id, company=company).exists():
-            return Response({"error": "Bank account not found in your company"}, status=status.HTTP_400_BAD_REQUEST)
         data = request.data.copy()
         data["company"] = company.id
-        data["fiscal_year"] = fy.id
         data["created_by"] = request.user.id
-        last = Receipt.objects.filter(company=company, fiscal_year=fy).order_by("-number").first()
-        data["number"] = (last.number + 1) if last else 1
-        serializer = ReceiptSerializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        receipt = serializer.save(
-            company=company, fiscal_year=fy, created_by=request.user
-        )
-        return Response(ReceiptSerializer(receipt).data, status=status.HTTP_201_CREATED)
+        try:
+            receipt = ReceiptService.create_receipt(company, request.user, data)
+            return success_response(
+                data=ReceiptSerializer(receipt).data,
+                message="Receipt created and posted",
+                http_status_code=status.HTTP_201_CREATED,
+            )
+        except ValidationError as e:
+            return business_rule_error(str(e))
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -573,14 +563,14 @@ def receipt_detail(request, pk):
     try:
         receipt = Receipt.objects.get(pk=pk, company=request.user.company)
     except Receipt.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return not_found_response("Receipt not found")
     if request.method == "GET":
-        return Response(ReceiptSerializer(receipt).data)
+        return success_response(data=ReceiptSerializer(receipt).data)
     elif request.method == "PUT":
         serializer = ReceiptSerializer(receipt, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(ReceiptSerializer(receipt).data)
+        return success_response(data=ReceiptSerializer(receipt).data)
     elif request.method == "DELETE":
         receipt.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -595,37 +585,24 @@ def payment_list(request):
     if gate:
         return gate
     company = request.user.company
-    fy = FiscalYear.objects.filter(company=company, is_closed=False).first()
     if request.method == "GET":
         qs = Payment.objects.filter(company=company).select_related(
             "fiscal_year", "supplier", "bank_account", "created_by"
         )
-        return Response(PaymentSerializer(qs, many=True).data)
+        return success_response(data=PaymentSerializer(qs, many=True).data)
     elif request.method == "POST":
-        if not fy:
-            return Response(
-                {"error": "No open fiscal year found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        # Company-scope FKs: validate supplier and bank_account belong to this company
-        supplier_id = request.data.get("supplier")
-        bank_account_id = request.data.get("bank_account")
-        if supplier_id and not Supplier.objects.filter(pk=supplier_id, company=company).exists():
-            return Response({"error": "Supplier not found in your company"}, status=status.HTTP_400_BAD_REQUEST)
-        if bank_account_id and not BankAccount.objects.filter(pk=bank_account_id, company=company).exists():
-            return Response({"error": "Bank account not found in your company"}, status=status.HTTP_400_BAD_REQUEST)
         data = request.data.copy()
         data["company"] = company.id
-        data["fiscal_year"] = fy.id
         data["created_by"] = request.user.id
-        last = Payment.objects.filter(company=company, fiscal_year=fy).order_by("-number").first()
-        data["number"] = (last.number + 1) if last else 1
-        serializer = PaymentSerializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        payment = serializer.save(
-            company=company, fiscal_year=fy, created_by=request.user
-        )
-        return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+        try:
+            payment = PaymentService.create_payment(company, request.user, data)
+            return success_response(
+                data=PaymentSerializer(payment).data,
+                message="Payment created and posted",
+                http_status_code=status.HTTP_201_CREATED,
+            )
+        except ValidationError as e:
+            return business_rule_error(str(e))
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -637,14 +614,14 @@ def payment_detail(request, pk):
     try:
         payment = Payment.objects.get(pk=pk, company=request.user.company)
     except Payment.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return not_found_response("Payment not found")
     if request.method == "GET":
-        return Response(PaymentSerializer(payment).data)
+        return success_response(data=PaymentSerializer(payment).data)
     elif request.method == "PUT":
         serializer = PaymentSerializer(payment, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(PaymentSerializer(payment).data)
+        return success_response(data=PaymentSerializer(payment).data)
     elif request.method == "DELETE":
         payment.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -666,21 +643,19 @@ def cheque_list(request):
         cheque_status = request.query_params.get("status")
         if cheque_status:
             qs = qs.filter(status=cheque_status)
-        return Response(ChequeSerializer(qs, many=True).data)
+        return success_response(data=ChequeSerializer(qs, many=True).data)
     elif request.method == "POST":
-        # Company-scope FKs: validate customer/supplier belong to this company
-        company = request.user.company
-        customer_id = request.data.get("customer")
-        supplier_id = request.data.get("supplier")
-        if customer_id and not Customer.objects.filter(pk=customer_id, company=company).exists():
-            return Response({"error": "Customer not found in your company"}, status=status.HTTP_400_BAD_REQUEST)
-        if supplier_id and not Supplier.objects.filter(pk=supplier_id, company=company).exists():
-            return Response({"error": "Supplier not found in your company"}, status=status.HTTP_400_BAD_REQUEST)
         data = request.data.copy()
-        serializer = ChequeSerializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(company=company)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        data["company"] = request.user.company.id
+        try:
+            cheque = ChequeService.create_cheque(request.user.company, data)
+            return success_response(
+                data=ChequeSerializer(cheque).data,
+                message="Cheque created",
+                http_status_code=status.HTTP_201_CREATED,
+            )
+        except ValidationError as e:
+            return business_rule_error(str(e))
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -692,14 +667,14 @@ def cheque_detail(request, pk):
     try:
         cheque = Cheque.objects.get(pk=pk, company=request.user.company)
     except Cheque.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return not_found_response("Cheque not found")
     if request.method == "GET":
-        return Response(ChequeSerializer(cheque).data)
+        return success_response(data=ChequeSerializer(cheque).data)
     elif request.method == "PUT":
         serializer = ChequeSerializer(cheque, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data)
+        return success_response(data=ChequeSerializer(cheque).data)
     elif request.method == "DELETE":
         cheque.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -716,7 +691,7 @@ def finance_summary(request):
     summary = FinanceDashboardSelector.get_summary(request.user.company)
     fy = summary.pop("fiscal_year", None)
     summary["fiscal_year"] = FiscalYearSerializer(fy).data if fy else None
-    return Response(summary)
+    return success_response(data=summary)
 
 
 @api_view(["GET"])
@@ -730,7 +705,7 @@ def customer_balances(request):
         {"id": c.id, "name": c.name, "national_id": c.national_id, "balance": c.balance}
         for c in customers
     ]
-    return Response(data)
+    return success_response(data=data)
 
 
 @api_view(["GET"])
@@ -744,4 +719,20 @@ def supplier_balances(request):
         {"id": s.id, "name": s.name, "national_id": s.national_id, "balance": s.balance}
         for s in suppliers
     ]
-    return Response(data)
+    return success_response(data=data)
+
+
+# ─── Trial Balance ──────────────────────────────────────────────
+
+@api_view(["GET"])
+def trial_balance(request):
+    """Return the trial balance for the current or specified fiscal year."""
+    gate = _check_finance_module(request)
+    if gate:
+        return gate
+    fy_id = request.query_params.get("fiscal_year")
+    result = LedgerService.get_trial_balance(
+        request.user.company,
+        fiscal_year_id=int(fy_id) if fy_id else None,
+    )
+    return success_response(data=result)

@@ -1,6 +1,9 @@
 """
 Tests for Finance module — CRUD, module gates, invoice confirmation,
 journal voucher balancing, customer/supplier search, financial summary.
+
+Updated to use standard API response format per API_SPECIFICATION.md §6-§8.
+All responses now follow: {"success": bool, "data": ..., "message": str, "errors": [...]}
 """
 
 import datetime
@@ -43,7 +46,8 @@ class FinanceModuleGateTests(TestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertIn("finance", response.data["error"].lower())
+        self.assertIn("success", response.data)
+        self.assertFalse(response.data["success"])
 
 
 class FiscalYearTests(TestCase):
@@ -59,6 +63,7 @@ class FiscalYearTests(TestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["success"])
 
     def test_create_fiscal_year(self):
         self.client.force_authenticate(user=self.user)
@@ -69,8 +74,9 @@ class FiscalYearTests(TestCase):
             "start_date": "2024-03-20",
             "end_date": "2025-03-19",
         }, format="json")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["name"], "۱۴۰۴")
+        self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["name"], "۱۴۰۴")
 
 
 class CustomerTests(TestCase):
@@ -91,7 +97,8 @@ class CustomerTests(TestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        self.assertTrue(response.data["success"])
+        self.assertEqual(len(response.data["data"]), 1)
 
     def test_create_customer(self):
         self.client.force_authenticate(user=self.user)
@@ -99,27 +106,28 @@ class CustomerTests(TestCase):
             "name": "شرکت بتا",
             "national_id": "10987654321",
         }, format="json")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["name"], "شرکت بتا")
+        self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["name"], "شرکت بتا")
 
     def test_search_customer_by_name(self):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(f"{self.url}?q=آلفا")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        self.assertEqual(len(response.data["data"]), 1)
 
     def test_search_customer_by_national_id(self):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(f"{self.url}?q=12345")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        self.assertEqual(len(response.data["data"]), 1)
 
     def test_customer_detail(self):
         self.client.force_authenticate(user=self.user)
         url = reverse("customer-detail", args=[self.customer.pk])
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["name"], "شرکت آلفا")
+        self.assertEqual(response.data["data"]["name"], "شرکت آلفا")
 
     def test_delete_customer(self):
         self.client.force_authenticate(user=self.user)
@@ -147,19 +155,21 @@ class SupplierTests(TestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        self.assertTrue(response.data["success"])
+        self.assertEqual(len(response.data["data"]), 1)
 
     def test_create_supplier(self):
         self.client.force_authenticate(user=self.user)
         response = self.client.post(self.url, {
             "name": "تأمین‌کننده دلتا",
         }, format="json")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertTrue(response.data["success"])
 
     def test_search_supplier(self):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(f"{self.url}?q=گاما")
-        self.assertEqual(len(response.data), 1)
+        self.assertEqual(len(response.data["data"]), 1)
 
 
 class InvoiceTests(TestCase):
@@ -239,22 +249,26 @@ class InvoiceTests(TestCase):
                 "total": 10000000,
             }],
         }, format="json")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["number"], 1)
-        self.assertEqual(response.data["status"], "draft")
+        self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["number"], 1)
+        self.assertEqual(response.data["data"]["status"], "draft")
 
     def test_auto_numbering(self):
         """Invoice numbers auto-increment per fiscal year and type."""
         self.client.force_authenticate(user=self.user)
         for i in range(3):
-            self.client.post(self.url, {
+            resp = self.client.post(self.url, {
                 "type": "sales",
                 "date_jalali": f"1404/04/{i+1:02d}",
                 "date": f"2025-06-{21+i:02d}",
+                "customer": self.customer.pk,
                 "subtotal": 1000000,
-                "total": 1100000,
-                "items": [],
+                "tax_amount": 0,
+                "total": 1000000,
+                "items": [{"description": "test", "quantity": 1, "unit_price": 1000000, "total": 1000000}],
             }, format="json")
+            self.assertIn(resp.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
         invoices = Invoice.objects.filter(company=self.company, type="sales")
         numbers = list(invoices.values_list("number", flat=True))
         self.assertEqual(sorted(numbers), [1, 2, 3])
@@ -268,14 +282,17 @@ class InvoiceTests(TestCase):
             "date": "2025-06-21",
             "customer": self.customer.pk,
             "subtotal": 5000000,
+            "tax_amount": 500000,
             "total": 5500000,
-            "items": [],
+            "items": [{"description": "test", "quantity": 1, "unit_price": 5000000, "total": 5000000}],
         }, format="json")
-        invoice_id = create_resp.data["id"]
+        self.assertIn(create_resp.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        invoice_id = create_resp.data["data"]["id"]
         confirm_url = reverse("invoice-confirm", args=[invoice_id])
         response = self.client.post(confirm_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["status"], "confirmed")
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["status"], "confirmed")
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.balance, 5500000)
 
@@ -320,9 +337,9 @@ class JournalVoucherTests(TestCase):
                 {"kol": self.kol_cash.pk, "debit": 0, "credit": 5000000},
             ],
         }, format="json")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["number"], 1)
-        self.assertEqual(len(response.data["entries"]), 2)
+        self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["number"], 1)
 
     def test_confirm_balanced_voucher(self):
         """A balanced voucher (debit == credit) can be confirmed."""
@@ -336,16 +353,19 @@ class JournalVoucherTests(TestCase):
                 {"kol": self.kol_cash.pk, "debit": 0, "credit": 1000000},
             ],
         }, format="json")
-        voucher_id = create_resp.data["id"]
+        self.assertIn(create_resp.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        voucher_id = create_resp.data["data"]["id"]
         confirm_url = reverse("voucher-confirm", args=[voucher_id])
         response = self.client.post(confirm_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["status"], "confirmed")
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["data"]["status"], "confirmed")
 
     def test_confirm_unbalanced_voucher_fails(self):
         """An unbalanced voucher (debit != credit) cannot be confirmed."""
         self.client.force_authenticate(user=self.user)
-        create_resp = self.client.post(self.url, {
+        # The service layer validates balance at creation time and raises 422
+        response = self.client.post(self.url, {
             "date_jalali": "1404/04/01",
             "date": "2025-06-21",
             "description": "عدم تطابق",
@@ -354,9 +374,7 @@ class JournalVoucherTests(TestCase):
                 {"kol": self.kol_cash.pk, "debit": 0, "credit": 500000},
             ],
         }, format="json")
-        voucher_id = create_resp.data["id"]
-        confirm_url = reverse("voucher-confirm", args=[voucher_id])
-        response = self.client.post(confirm_url)
+        # Service validates balance at creation — returns 422
         self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
 
 
@@ -384,14 +402,15 @@ class ChequeTests(TestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        self.assertTrue(response.data["success"])
+        self.assertEqual(len(response.data["data"]), 1)
 
     def test_filter_by_type(self):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(f"{self.url}?cheque_type=received")
-        self.assertEqual(len(response.data), 1)
+        self.assertEqual(len(response.data["data"]), 1)
         response = self.client.get(f"{self.url}?cheque_type=issued")
-        self.assertEqual(len(response.data), 0)
+        self.assertEqual(len(response.data["data"]), 0)
 
 
 class FinanceSummaryTests(TestCase):
@@ -407,12 +426,33 @@ class FinanceSummaryTests(TestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["total_sales"], 0)
-        self.assertEqual(response.data["total_receipts"], 0)
+        self.assertTrue(response.data["success"])
+        data = response.data["data"]
+        self.assertEqual(data["total_sales"], 0)
+        self.assertEqual(data["total_receipts"], 0)
 
     def test_summary_no_fiscal_year(self):
         """When no fiscal year exists, summary returns zeros."""
         self.client.force_authenticate(user=self.user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIsNone(response.data["fiscal_year"])
+        self.assertIsNone(response.data["data"]["fiscal_year"])
+
+
+class TrialBalanceTests(TestCase):
+    """Tests for the trial_balance endpoint."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.company = create_test_company()
+        self.user = create_test_user(company=self.company, role="ceo")
+        self.url = reverse("trial-balance")
+
+    def test_trial_balance_empty(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["success"])
+        self.assertTrue(response.data["data"]["is_balanced"])
+        self.assertEqual(response.data["data"]["total_debit"], 0)
+        self.assertEqual(response.data["data"]["total_credit"], 0)

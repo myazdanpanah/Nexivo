@@ -41,4 +41,5 @@ urlpatterns = [
     path("cheques/<int:pk>/", views.cheque_detail, name="cheque-detail"),
     # Reports
     path("summary/", views.finance_summary, name="finance-summary"),
+    path("trial-balance/", views.trial_balance, name="trial-balance"),
 ]

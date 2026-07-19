@@ -111,7 +111,19 @@ class JournalService:
                 created_by=user,
             )
             for entry_data in entries_data:
-                JournalEntry.objects.create(voucher=voucher, **entry_data)
+                # Extract FK IDs as proper ints (DRF may pass string PKs)
+                kol_id = int(entry_data.get("kol")) if entry_data.get("kol") else None
+                moin_id = int(entry_data.get("moin")) if entry_data.get("moin") else None
+                tafzili_id = int(entry_data.get("tafzili")) if entry_data.get("tafzili") else None
+                JournalEntry.objects.create(
+                    voucher=voucher,
+                    kol_id=kol_id,
+                    moin_id=moin_id if moin_id else None,
+                    tafzili_id=tafzili_id if tafzili_id else None,
+                    description=entry_data.get("description", ""),
+                    debit=int(entry_data.get("debit", 0)),
+                    credit=int(entry_data.get("credit", 0)),
+                )
 
         return voucher
 

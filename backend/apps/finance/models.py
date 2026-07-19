@@ -502,3 +502,9 @@ class Cheque(models.Model):
     def __str__(self):
         type_label = "دریافتی" if self.cheque_type == "received" else "صادره"
         return f"چک {type_label} شماره {self.number} - {self.bank_name}"
+
+
+# ─── Tax Models (imported from tax.py for Django discovery) ───────
+# These are defined in tax.py but imported here so Django's
+# migration framework discovers them automatically.
+from .tax import TaxCategory, TaxCode, TaxRule, TaxTransaction  # noqa: F401
