@@ -91,37 +91,36 @@ Nexivo is a modular, self-hosted SaaS platform that lets you:
 ## Architecture
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│              │     │              │     │              │
-│   Frontend   │────▶│   Backend    │────▶│  PostgreSQL  │
-│  (React +    │ API │  (Django +   │     │   Database   │
-│   Vite)      │◀────│   DRF)       │◀────│              │
-│   :3000      │     │   :8000      │     │   :5432      │
-│              │     │              │     │              │
-└──────────────┘     └──────┬───────┘     └──────────────┘
-                            │
-                     ┌──────┴───────┐
-                     │              │
-                     │   Superset   │
-                     │   :8088      │
-                     │              │
-                     └──────────────┘
-                            │
-                     ┌──────┴───────┐
-                     │              │
-                     │    Redis     │
-                     │  :6379       │
-                     │  (Celery)    │
-                     │              │
-                     └──────────────┘
+┌──────────────┐     ┌──────────────────────────────────────────┐
+│              │     │            Backend (Django + DRF)          │
+│   Frontend   │────▶│  ┌─────────┬─────────┬─────────┬───────┐  │
+│  (React +    │ API │  │   BI    │Finance  │   DB    │  LLM  │  │
+│   Vite)      │◀────│  │Dashboard│ Module  │ Manager │Gateway│  │
+│   :3000      │     │  └────┬────┴────┬────┴────┬────┴───┬───┘  │
+│              │     │       │         │         │        │      │
+└──────────────┘     │  ┌────┴─────────┴─────────┴────────┴───┐  │
+                     │  │     Module Management System         │  │
+                     │  │  Company.enabled_modules → RBAC      │  │
+                     │  └────────────────────────────────────┘  │
+                     └──────────────────┬───────────────────────┘
+                                        │
+                     ┌──────────────────┼───────────────────┐
+                     │                  │                   │
+               ┌─────┴─────┐     ┌──────┴──────┐     ┌─────┴─────┐
+               │ PostgreSQL │     │   Superset  │     │   Redis   │
+               │   :5432    │     │    :8088    │     │   :6379   │
+               │            │     │             │     │  (Celery) │
+               └───────────┘     └─────────────┘     └───────────┘
 ```
 
 **Request flow:**
 1. The React frontend sends API requests to the Django backend (proxied via Vite in dev, Nginx in production).
-2. Django authenticates via JWT, applies role-based permissions, and queries PostgreSQL.
+2. Django authenticates via JWT, checks `RequireModule` permission (module gate), applies role-based permissions, and queries PostgreSQL.
 3. Uploaded data files are parsed by pandas, and a PostgreSQL table is created automatically.
 4. Charts fetch data from the `/query/` endpoint, which applies RLS filters, widget-level filters, dashboard-level filters, and cross-chart filters before returning results.
-5. Apache Superset can be used for advanced embedded analytics with guest tokens.
+5. Finance module supports Iranian accounting (Kol → Moin → Tafzili) with automatic invoice numbering, journal voucher balancing, and balance tracking.
+6. LLM Gateway routes AI requests to Ollama/OpenAI/Gemini/Anthropic with encrypted API keys, rate limiting, and usage tracking.
+7. Apache Superset can be used for advanced embedded analytics with guest tokens.
 
 ---
 
@@ -144,6 +143,7 @@ Nexivo is a modular, self-hosted SaaS platform that lets you:
 | **Gunicorn** | WSGI HTTP server |
 | **python-decouple** | Environment variable management |
 | **Pillow** | Image processing (user avatars) |
+| **cryptography** | API key encryption (Fernet symmetric) |
 
 ### Frontend
 
@@ -181,27 +181,29 @@ Nexivo/
 ├── backend/                      # Django REST API
 │   ├── apps/
 │   │   ├── accounts/             # Auth, users, org hierarchy, module management
+│   │   │   ├── models.py         # Company, Division, Team, User, CustomRole
+│   │   │   ├── permissions.py    # RequireModule DRF permission class
+│   │   │   ├── tests_helpers.py  # Shared test fixtures
+│   │   │   └── tests.py          # 14 tests (login, register, JWT)
 │   │   ├── dashboards/           # BI Dashboard module
-│   │   ├── datasets/             # Data upload & querying
-│   │   ├── db_manager/           # Database management & SQL editor
+│   │   ├── datasets/             # Data upload & querying (~50 tests)
+│   │   ├── db_manager/           # Database management & SQL editor (~30 tests)
 │   │   ├── finance/              # Iranian accounting (Kol/Tafzili/Invoices/etc.)
+│   │   │   ├── models.py         # 15 models (Kol, Moin, Tafzili, Invoice, etc.)
+│   │   │   └── tests.py          # ~25 tests (CRUD, module gates, business logic)
 │   │   └── llm/                  # LLM Gateway (Ollama/OpenAI/Gemini/Anthropic)
-│   ├── nexivo/                   # Django project config
-│   ├── requirements.txt
-│   └── Dockerfile
+│   │       ├── service.py        # Unified provider interface
+│   │       └── tests.py          # ~20 tests (providers, chat, encryption)
+│   └── nexivo/                   # Django project config
 ├── frontend/                     # React SPA
-│   ├── src/
-│   │   ├── api/                  # API clients (finance.ts, llm.ts, dbManager.ts)
-│   │   ├── components/           # Shared UI components
-│   │   ├── pages/
-│   │   │   ├── finance/          # Finance module pages (10 pages)
-│   │   │   ├── LLMSettingsPage.tsx  # AI provider management
-│   │   │   ├── LauncherPage.tsx  # Module tile launcher
-│   │   │   ├── SettingsPage.tsx  # Module toggle + org structure
-│   │   │   └── ... (other pages)
-│   │   └── store/                # Zustand state stores
-│   ├── package.json
-│   └── Dockerfile
+│   └── src/
+│       ├── api/                  # API clients (finance.ts, llm.ts, dbManager.ts)
+│       ├── pages/
+│       │   ├── finance/          # Finance module pages (10 pages)
+│       │   ├── LLMSettingsPage.tsx
+│       │   ├── LauncherPage.tsx  # Module tile launcher
+│       │   └── SettingsPage.tsx  # Module toggle + org structure
+│       └── store/                # Zustand state stores
 ├── docker-compose.yml
 ├── Makefile
 └── README.md
@@ -438,26 +440,29 @@ The query engine supports automatic aggregation:
 
 ---
 
-## Running Tests
+## Testing
 
-### Backend Tests
+Nexivo has **180+ backend tests** across all modules with shared test fixtures.
+
+### Test Architecture
+
+- **Shared Helper** (`backend/apps/accounts/tests_helpers.py`): Provides `create_test_company()` and `create_test_user()` — eliminates duplication across all test files
+- **Module Tests**: Each app has its own test file covering CRUD, permissions, module gates, and business logic
+- **CI Pipeline**: GitHub Actions runs all tests on every push/PR to `main`
+
+### Running Tests
 
 ```bash
+# Backend (Django)
 cd backend
 python manage.py check
 python manage.py test --verbosity=2
-```
 
-### Frontend Type Checking
-
-```bash
+# Frontend (TypeScript)
 cd frontend
 npx tsc --noEmit
-```
 
-### Using Make
-
-```bash
+# Or use Make
 make test-backend
 make test-frontend
 ```
@@ -491,8 +496,23 @@ make test-frontend
 
 The GitHub Actions workflow runs on every push and PR to `main`:
 
-1. **Backend Tests** — PostgreSQL 15 service container → `check` → `migrate` → `test`
+1. **Backend Tests** — PostgreSQL 15 service container → `check` → `migrate` → `test` (180+ tests)
 2. **Frontend Typecheck** — Node.js 20 → `tsc --noEmit`
+
+---
+
+## Module System
+
+Nexivo uses a pluggable module architecture. Each company enables/disables modules via `Company.enabled_modules`, and the backend enforces access via `RequireModule` permission gates.
+
+| Module | Endpoint Prefix | Description |
+|---|---|---|
+| `bi_dashboard` | `/api/v1/dashboards/` | Drag-and-drop BI dashboards with ECharts |
+| `finance` | `/api/v1/finance/` | Iranian accounting (Kol/Moin/Tafzili), invoices, receipts, payments |
+| `db_manager` | `/api/v1/db-manager/` | External database browsing, SQL editor, cell editing |
+| `datasets` | `/api/v1/datasets/` | Excel/CSV upload and PostgreSQL table creation |
+| `llm` | `/api/v1/llm/` | Unified AI gateway (Ollama/OpenAI/Gemini/Anthropic) |
+| `settings` | `/api/v1/auth/company/` | Module toggle + organization hierarchy management |
 
 ---
 

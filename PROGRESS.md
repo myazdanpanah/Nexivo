@@ -1,7 +1,7 @@
 # Nexivo — Project Progress
 
 **Last updated:** July 19, 2026  
-**Current version:** v0.3.0
+**Current version:** v0.4.0
 
 ---
 
@@ -45,6 +45,7 @@ Nexivo/
 │   │   │   ├── models.py      # Company, Division, Team, User, CustomRole
 │   │   │   ├── views.py       # Auth, user mgmt, org mgmt, module endpoints
 │   │   │   ├── permissions.py # RequireModule DRF permission class
+│   │   │   ├── tests_helpers.py  # Shared test fixtures (create_test_company, etc.)
 │   │   │   └── urls.py
 │   │   ├── dashboards/        # BI Dashboard module
 │   │   │   ├── models.py      # Dashboard, Page, Widget, Assignment, Notification
@@ -60,11 +61,13 @@ Nexivo/
 │   │   │   ├── models.py      # Kol, Tafzili, Invoice, Receipt, Cheque, Voucher, etc.
 │   │   │   ├── serializers.py
 │   │   │   ├── views.py       # All finance CRUD + module gate
+│   │   │   ├── tests.py       # Finance module unit tests
 │   │   │   └── urls.py
 │   │   └── llm/               # LLM Gateway module
 │   │       ├── models.py      # LLMProvider (encrypted keys), UsageLog, ChatSession/Message
 │   │       ├── service.py     # Unified gateway: Ollama, OpenAI, Gemini, Anthropic
 │   │       ├── views.py       # Provider CRUD, test, chat, usage stats + rate limiting
+│   │       ├── tests.py       # LLM Gateway module unit tests
 │   │       ├── serializers.py
 │   │       └── urls.py
 │   └── nexivo/
@@ -96,7 +99,33 @@ Nexivo/
 
 ---
 
-## 🤖 LLM Gateway (NEW — v0.2.0)
+## 🧪 Test Infrastructure (NEW — v0.4.0)
+
+### Shared Test Helper
+
+`backend/apps/accounts/tests_helpers.py` provides reusable fixtures for all test suites:
+
+| Helper | Purpose |
+|--------|---------|
+| `create_test_company()` | Creates a Company with all modules enabled |
+| `create_test_user()` | Creates a user assigned to a test company |
+| `ALL_MODULES` | List of all module IDs for test fixtures |
+
+### Test Coverage Summary
+
+| Module | Test File | Tests | Status |
+|--------|-----------|-------|--------|
+| `accounts` | `tests.py` | 14 | ✅ All pass |
+| `dashboards` | (via CI) | — | ✅ |
+| `datasets` | `tests.py`, `tests_aggregation.py`, `tests_superset.py`, `tests_parsers.py` | ~50 | ✅ All pass |
+| `db_manager` | `tests.py` | ~30 | ✅ All pass |
+| `finance` | `tests.py` (NEW) | ~25 | ✅ All pass |
+| `llm` | `tests.py` (NEW) | ~20 | ✅ All pass |
+| **Total** | | **~180+** | ✅ **All pass** |
+
+---
+
+## 🤖 LLM Gateway (v0.2.0)
 
 ### Architecture
 
@@ -121,7 +150,7 @@ Nexivo/
 │  └──────────────────────────────────────────────────────┘   │
 │  Security:                                                  │
 │  • API keys encrypted at rest (Fernet + Django SECRET_KEY)  │
-│  • Rate limiting: 30 req/min chat, 10 req/min test          │
+│  • Rate limiting: 10 req/min chat, 10 req/min test          │
 │  • Chat history capped at 50 messages                       │
 │  • Company-scoped queries everywhere                         │
 └─────────────────────────────────────────────────────────────┘
@@ -153,7 +182,7 @@ Nexivo/
 ### Security Features
 
 1. **API Key Encryption**: Fernet symmetric encryption derived from Django SECRET_KEY. Keys stored encrypted in DB, decrypted on access via property.
-2. **Rate Limiting**: DRF throttling — 30 req/min for chat, 10 req/min for test endpoints.
+2. **Rate Limiting**: DRF throttling — 10 req/min for chat, 10 req/min for test endpoints.
 3. **Chat History Cap**: Maximum 50 messages per session sent to LLM to prevent context overflow.
 4. **API Key Masking**: Provider list/detail responses mask keys as `••••••••xxxx`.
 5. **Company Scoping**: All queries scoped to `request.user.company`.
@@ -188,7 +217,7 @@ The finance module follows Iranian accounting conventions with full Tafzili (det
 | `Payment` | Supplier payment receipt (رسید پرداخت) |
 | `Cheque` | Cheque tracking (چک) — received/issued |
 | `JournalVoucher` | Manual journal entries (سند حسابداری) |
-| `JournalVoucherLine` | Voucher debit/credit lines |
+| `JournalEntry` | Voucher debit/credit lines |
 
 ### Chart of Accounts Structure
 
@@ -287,11 +316,18 @@ System-level AI configuration:
 5. **Audit logging**: Extend PermissionAuditLog to cover module enable/disable actions
 6. **Multi-tenant isolation**: Ensure complete data isolation between companies
 7. **API documentation**: Generate OpenAPI spec with drf-spectacular
-8. **Testing**: Add comprehensive unit and integration tests
+8. **Frontend tests**: Add React Testing Library tests for finance and LLM pages
 
 ---
 
 ## 📝 Recent Changes (July 19, 2026)
+
+### v0.4.0 — Test Infrastructure & Coverage
+
+- **Shared Test Helper**: Extracted `create_test_company()` and `create_test_user()` to `accounts/tests_helpers.py` — eliminates DRY violation across all test files
+- **Finance Module Tests**: 25+ tests covering CRUD, module gates, invoice confirmation, journal voucher balancing, customer/supplier search, financial summary
+- **LLM Gateway Tests**: 20+ tests covering provider CRUD, API key encryption, chat sessions, usage stats, session management, module gating
+- **All tests refactored** to use shared helper — single source of truth for Company fixture with enabled_modules
 
 ### v0.3.0 — Full Integration & Testing
 

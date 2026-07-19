@@ -57,10 +57,9 @@ def fiscal_year_list(request):
         return Response(FiscalYearSerializer(years, many=True).data)
     elif request.method == "POST":
         data = request.data.copy()
-        data["company"] = request.user.company.id
         serializer = FiscalYearSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        serializer.save(company=request.user.company)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -99,10 +98,9 @@ def account_group_list(request):
         return Response(AccountGroupSerializer(groups, many=True).data)
     elif request.method == "POST":
         data = request.data.copy()
-        data["company"] = request.user.company.id
         serializer = AccountGroupSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        serializer.save(company=request.user.company)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -216,10 +214,9 @@ def bank_account_list(request):
         return Response(BankAccountSerializer(accounts, many=True).data)
     elif request.method == "POST":
         data = request.data.copy()
-        data["company"] = request.user.company.id
         serializer = BankAccountSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        serializer.save(company=request.user.company)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -263,10 +260,9 @@ def customer_list(request):
         return Response(CustomerSerializer(customers, many=True).data)
     elif request.method == "POST":
         data = request.data.copy()
-        data["company"] = request.user.company.id
         serializer = CustomerSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        serializer.save(company=request.user.company)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -310,10 +306,9 @@ def supplier_list(request):
         return Response(SupplierSerializer(suppliers, many=True).data)
     elif request.method == "POST":
         data = request.data.copy()
-        data["company"] = request.user.company.id
         serializer = SupplierSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        serializer.save(company=request.user.company)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -383,7 +378,7 @@ def journal_voucher_list(request):
         serializer = JournalVoucherCreateSerializer(data=data)
         serializer.is_valid(raise_exception=True)
         voucher = serializer.save(
-            company=company, created_by=request.user
+            company=company, fiscal_year_id=fy_id, created_by=request.user
         )
         return Response(
             JournalVoucherSerializer(voucher).data,
@@ -711,10 +706,9 @@ def cheque_list(request):
         if supplier_id and not Supplier.objects.filter(pk=supplier_id, company=company).exists():
             return Response({"error": "Supplier not found in your company"}, status=status.HTTP_400_BAD_REQUEST)
         data = request.data.copy()
-        data["company"] = company.id
         serializer = ChequeSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        serializer.save(company=company)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
