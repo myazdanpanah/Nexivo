@@ -53,28 +53,24 @@ class WorkflowTransition:
 
 
 # Standard transitions per WORKFLOW_ENGINE.md §12: State Lifecycle
+# For now, documents go directly from draft → confirmed (simplified flow)
+# Full multi-level approval will be added when the workflow engine is fully implemented
 DOCUMENT_TRANSITIONS = {
     "invoice": [
-        WorkflowTransition(WorkflowState.DRAFT, WorkflowState.SUBMITTED, "submit"),
-        WorkflowTransition(WorkflowState.SUBMITTED, WorkflowState.PENDING_APPROVAL, "approve"),
-        WorkflowTransition(WorkflowState.PENDING_APPROVAL, WorkflowState.APPROVED, "confirm"),
-        WorkflowTransition(WorkflowState.APPROVED, WorkflowState.POSTED, "post"),
+        WorkflowTransition(WorkflowState.DRAFT, WorkflowState.CONFIRMED, "confirm"),
         WorkflowTransition(WorkflowState.DRAFT, WorkflowState.CANCELLED, "cancel"),
-        WorkflowTransition(WorkflowState.SUBMITTED, WorkflowState.REJECTED, "reject"),
+        WorkflowTransition(WorkflowState.CONFIRMED, WorkflowState.POSTED, "post"),
     ],
     "voucher": [
-        WorkflowTransition(WorkflowState.DRAFT, WorkflowState.SUBMITTED, "submit"),
-        WorkflowTransition(WorkflowState.SUBMITTED, WorkflowState.CONFIRMED, "confirm"),
+        WorkflowTransition(WorkflowState.DRAFT, WorkflowState.CONFIRMED, "confirm"),
         WorkflowTransition(WorkflowState.DRAFT, WorkflowState.CANCELLED, "cancel"),
     ],
     "receipt": [
-        WorkflowTransition(WorkflowState.DRAFT, WorkflowState.SUBMITTED, "submit"),
-        WorkflowTransition(WorkflowState.SUBMITTED, WorkflowState.CONFIRMED, "confirm"),
+        WorkflowTransition(WorkflowState.DRAFT, WorkflowState.CONFIRMED, "confirm"),
         WorkflowTransition(WorkflowState.DRAFT, WorkflowState.CANCELLED, "cancel"),
     ],
     "payment": [
-        WorkflowTransition(WorkflowState.DRAFT, WorkflowState.SUBMITTED, "submit"),
-        WorkflowTransition(WorkflowState.SUBMITTED, WorkflowState.CONFIRMED, "confirm"),
+        WorkflowTransition(WorkflowState.DRAFT, WorkflowState.CONFIRMED, "confirm"),
         WorkflowTransition(WorkflowState.DRAFT, WorkflowState.CANCELLED, "cancel"),
     ],
 }

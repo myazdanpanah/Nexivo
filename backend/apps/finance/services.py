@@ -30,6 +30,8 @@ from .validators import (
     JournalValidator, InvoiceValidator, ChequeValidator,
 )
 from .exceptions import ValidationError  # noqa: F401 — re-exported for backward compat
+from .posting import PostingEngine
+from .workflow import WorkflowEngine
 
 logger = logging.getLogger(__name__)
 
@@ -194,8 +196,9 @@ class InvoiceService:
     @staticmethod
     def confirm_invoice(invoice: Invoice, user) -> Invoice:
         """
-        Confirm an invoice — updates customer/supplier balance.
-        Must run inside a transaction for data integrity.
+        Confirm an invoice — updates customer/supplier balance and posts to GL.
+        Per WORKFLOW_ENGINE.md §62: Uses WorkflowEngine for state transitions.
+        Per ACCOUNTING_MODULE.md §8: Posts via PostingEngine.
         """
         if invoice.status == "confirmed":
             return invoice  # idempotent
@@ -203,8 +206,10 @@ class InvoiceService:
             raise ValidationError("Only draft invoices can be confirmed.")
 
         with transaction.atomic():
-            invoice.status = "confirmed"
-            invoice.save(update_fields=["status", "updated_at"])
+            # Execute workflow transition
+            WorkflowEngine.execute_transition(
+                invoice, "invoice", "confirm", user
+            )
 
             # Update party balance
             if invoice.customer and invoice.type == "sales":
@@ -223,6 +228,9 @@ class InvoiceService:
                 Supplier.objects.filter(pk=invoice.supplier_id).update(
                     balance=F("balance") - invoice.total
                 )
+
+            # Post to general ledger via PostingEngine
+            PostingEngine.post_invoice(invoice, user)
 
         logger.info(f"Invoice #{invoice.number} confirmed by {user.username}")
         return invoice
@@ -265,6 +273,8 @@ class ReceiptService:
                 invoice_id=data.get("invoice"),
                 created_by=user,
             )
+            # Post to general ledger via PostingEngine
+            PostingEngine.post_receipt(receipt, user)
         return receipt
 
 
@@ -305,6 +315,8 @@ class PaymentService:
                 invoice_id=data.get("invoice"),
                 created_by=user,
             )
+            # Post to general ledger via PostingEngine
+            PostingEngine.post_payment(payment, user)
         return payment
 
 

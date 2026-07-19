@@ -180,6 +180,45 @@ class InvoiceTests(TestCase):
         self.customer = Customer.objects.create(
             company=self.company, name="مشتری تست",
         )
+        # Create chart of accounts required by PostingEngine
+        self.group_assets = AccountGroup.objects.create(
+            company=self.company, code="1", name="دارایی‌ها"
+        )
+        self.group_liabilities = AccountGroup.objects.create(
+            company=self.company, code="2", name="بدهی‌ها"
+        )
+        self.group_revenue = AccountGroup.objects.create(
+            company=self.company, code="4", name="درآمدها"
+        )
+        # Kol accounts used by PostingEngine
+        self.kol_bank = KolAccount.objects.create(
+            company=self.company, group=self.group_assets, code="102",
+            name="بانک", account_type="asset", normal_balance="debit",
+        )
+        self.kol_inventory = KolAccount.objects.create(
+            company=self.company, group=self.group_assets, code="111",
+            name="موجودی کالا", account_type="asset", normal_balance="debit",
+        )
+        self.kol_customer = KolAccount.objects.create(
+            company=self.company, group=self.group_assets, code="131",
+            name="حساب مشتریان", account_type="asset", normal_balance="debit",
+        )
+        self.kol_input_vat = KolAccount.objects.create(
+            company=self.company, group=self.group_assets, code="133",
+            name="مالیات پرداختی", account_type="asset", normal_balance="debit",
+        )
+        self.kol_supplier = KolAccount.objects.create(
+            company=self.company, group=self.group_liabilities, code="231",
+            name="حساب تأمین‌کنندگان", account_type="liability", normal_balance="credit",
+        )
+        self.kol_vat = KolAccount.objects.create(
+            company=self.company, group=self.group_liabilities, code="341",
+            name="مالیات بر ارزش افزوده", account_type="liability", normal_balance="credit",
+        )
+        self.kol_revenue = KolAccount.objects.create(
+            company=self.company, group=self.group_revenue, code="401",
+            name="درآمد فروش", account_type="revenue", normal_balance="credit",
+        )
         self.url = reverse("invoice-list")
 
     def test_create_invoice(self):
