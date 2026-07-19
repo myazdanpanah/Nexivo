@@ -30,6 +30,8 @@ INSTALLED_APPS = [
     "apps.datasets.apps.DatasetsConfig",
     "apps.dashboards.apps.DashboardsConfig",
     "apps.db_manager.apps.DbManagerConfig",
+    "apps.finance.apps.FinanceConfig",
+    "apps.llm.apps.LlmConfig",
 ]
 
 MIDDLEWARE = [

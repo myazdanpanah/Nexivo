@@ -19,4 +19,7 @@ urlpatterns = [
     # Custom Role Management
     path("roles/", views.role_list_create, name="role-list-create"),
     path("roles/<int:pk>/", views.role_detail, name="role-detail"),
+    # Module Management
+    path("companies/<int:pk>/modules/", views.company_modules, name="company-modules"),
+    path("user-modules/", views.user_modules, name="user-modules"),
 ]

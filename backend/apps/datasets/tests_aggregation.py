@@ -9,6 +9,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.accounts.models import Company
 from .models import Dataset
 
 User = get_user_model()
@@ -19,8 +20,12 @@ class AggregationTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.company = Company.objects.create(
+            name="Test Company",
+            enabled_modules=["bi_dashboard", "finance", "crm", "db_manager", "datasets", "llm", "settings"],
+        )
         self.user = User.objects.create_user(
-            username="agguser", password="testpass123", role="ceo"
+            username="agguser", password="testpass123", role="ceo", company=self.company
         )
 
         # Create a test table with realistic data for aggregation

@@ -13,6 +13,20 @@ from .serializers import (
     GoogleSheetsSyncCreateSerializer,
 )
 from apps.datasets.models import Dataset
+from apps.accounts.permissions import RequireModule
+
+# ─── Module gate: all db_manager endpoints require 'db_manager' ───
+_DBManagerPerm = RequireModule.for_module("db_manager")()
+
+
+def _check_db_manager_module(request):
+    """Return None if OK, or a 403 Response if the module is not enabled."""
+    if not _DBManagerPerm.has_permission(request, None):
+        return Response(
+            {"error": "Module 'db_manager' is not enabled for your company"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return None
 
 
 def _is_admin_or_ceo(user):
@@ -46,6 +60,9 @@ def _check_table_perm(user, source, table):
 @api_view(["GET", "POST"])
 def database_list(request):
     """List all databases (Nexivo datasets + external) or add external DB."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     if request.method == "GET":
         result = []
 
@@ -101,6 +118,9 @@ def database_list(request):
 @api_view(["GET", "PUT", "DELETE"])
 def database_detail(request, pk):
     """Get, update, or delete an external DB connection."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     try:
         db = ExternalDatabase.objects.get(pk=pk)
     except ExternalDatabase.DoesNotExist:
@@ -125,6 +145,9 @@ def database_detail(request, pk):
 @api_view(["POST"])
 def database_test(request, pk):
     """Test an external DB connection."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     try:
         db = ExternalDatabase.objects.get(pk=pk)
     except ExternalDatabase.DoesNotExist:
@@ -141,6 +164,9 @@ def database_test(request, pk):
 @api_view(["GET"])
 def table_list(request, source):
     """List tables in a database."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     from .services.table_ops import list_tables
 
     try:
@@ -153,6 +179,9 @@ def table_list(request, source):
 @api_view(["GET"])
 def table_schema(request, source, table):
     """Get column names/types for a table."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     from .services.table_ops import get_table_schema
 
     try:
@@ -165,6 +194,9 @@ def table_schema(request, source, table):
 @api_view(["GET"])
 def table_data(request, source, table):
     """Browse rows (paginated) for a table."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     from .services.table_ops import browse_data
 
     try:
@@ -182,6 +214,9 @@ def table_data(request, source, table):
 @api_view(["GET"])
 def table_count(request, source, table):
     """Get row count for a table."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     from .services.table_ops import count_rows
 
     try:
@@ -197,6 +232,9 @@ def table_count(request, source, table):
 @api_view(["PATCH"])
 def cell_update(request, source, table):
     """Update a single cell."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     data = request.data
     pk_column = data.get("pk_column")
     pk_value = data.get("pk_value")
@@ -225,6 +263,9 @@ def cell_update(request, source, table):
 @api_view(["PATCH"])
 def batch_update(request, source, table):
     """Batch update cells."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     updates = request.data.get("updates", [])
     if not updates:
         return Response({"error": "updates list is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -245,6 +286,9 @@ def batch_update(request, source, table):
 @api_view(["POST"])
 def row_insert(request, source, table):
     """Insert a new row."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     perm_err = _check_table_perm(request.user, source, table)
     if perm_err:
         return perm_err
@@ -261,6 +305,9 @@ def row_insert(request, source, table):
 @api_view(["DELETE"])
 def row_delete(request, source, table):
     """Delete rows by primary key values."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     pk_column = request.data.get("pk_column")
     pk_values = request.data.get("pk_values", [])
 
@@ -289,6 +336,9 @@ def row_delete(request, source, table):
 @api_view(["POST"])
 def column_add(request, source, table):
     """Add a new column."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     if not _is_admin_or_ceo(request.user):
         return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 
@@ -312,6 +362,9 @@ def column_add(request, source, table):
 @api_view(["PATCH"])
 def column_update(request, source, table, column_name):
     """Rename or change type of a column."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     if not _is_admin_or_ceo(request.user):
         return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 
@@ -334,6 +387,9 @@ def column_update(request, source, table, column_name):
 @api_view(["DELETE"])
 def column_drop(request, source, table, column_name):
     """Drop a column."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     if not _is_admin_or_ceo(request.user):
         return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 
@@ -352,6 +408,9 @@ def column_drop(request, source, table, column_name):
 @api_view(["POST"])
 def file_import(request, source, table):
     """Import a file into an existing table."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     uploaded_file = request.FILES.get("file")
     if not uploaded_file:
         return Response({"error": "file is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -375,6 +434,9 @@ def file_import(request, source, table):
 @api_view(["POST"])
 def file_import_new(request):
     """Import a file to a new table."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     uploaded_file = request.FILES.get("file")
     table_name = request.data.get("table_name")
     source = request.data.get("source", "local")
@@ -399,6 +461,9 @@ def file_import_new(request):
 @api_view(["POST"])
 def sql_execute(request):
     """Execute a SQL query (admin/CEO only)."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     if not _is_admin_or_ceo(request.user):
         return Response({"error": "SQL editor is admin/CEO only"}, status=status.HTTP_403_FORBIDDEN)
 
@@ -423,6 +488,9 @@ def sql_execute(request):
 @api_view(["GET", "POST"])
 def sync_list(request):
     """List or create sync configurations."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     if request.method == "GET":
         if _is_admin_or_ceo(request.user) or request.user.is_staff:
             syncs = GoogleSheetsSync.objects.all()
@@ -445,6 +513,9 @@ def sync_list(request):
 @api_view(["GET", "PUT", "DELETE"])
 def sync_detail(request, pk):
     """Get, update, or delete a sync configuration."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     try:
         sync = GoogleSheetsSync.objects.get(pk=pk)
     except GoogleSheetsSync.DoesNotExist:
@@ -469,6 +540,9 @@ def sync_detail(request, pk):
 @api_view(["POST"])
 def sync_run(request, pk):
     """Trigger a manual sync."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     try:
         sync = GoogleSheetsSync.objects.get(pk=pk)
     except GoogleSheetsSync.DoesNotExist:
@@ -493,6 +567,9 @@ def sync_run(request, pk):
 @api_view(["GET", "POST"])
 def permission_list_create(request):
     """List all permissions (admin only) or grant a new one."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     if not _is_admin_or_ceo(request.user):
         return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 
@@ -513,6 +590,9 @@ def permission_list_create(request):
 @api_view(["DELETE"])
 def permission_detail(request, pk):
     """Revoke a permission."""
+    gate = _check_db_manager_module(request)
+    if gate:
+        return gate
     if not _is_admin_or_ceo(request.user):
         return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 

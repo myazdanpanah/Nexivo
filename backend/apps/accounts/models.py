@@ -3,11 +3,39 @@ from django.db import models
 from .role_filters import RoleFilter  # noqa: F401 — registered via role_filters.py
 
 
+# ─── Module Registry ──────────────────────────────────────────────
+# Each module that Nexivo can host is declared here.  The key is the
+# stable slug used in enabled_modules JSON and route guards.
+MODULE_CHOICES = [
+    ("bi_dashboard", "BI Dashboard"),
+    ("finance",       "Finance"),
+    ("crm",           "CRM"),
+    ("db_manager",    "Database Manager"),
+    ("datasets",      "Data Upload"),
+    ("llm",           "LLM Gateway"),
+    ("settings",      "Settings"),
+]
+
+ALL_MODULE_IDS = [m[0] for m in MODULE_CHOICES]
+
+
 class Company(models.Model):
     """Top-level organization (e.g., a holding company or brand)."""
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     logo = models.ImageField(upload_to="companies/", blank=True, null=True)
+
+    # Which Nexivo modules this company has subscribed to / enabled.
+    # Stored as a JSON list of module slugs, e.g. ["bi_dashboard", "datasets"].
+    # A superuser bypasses this; a normal user only sees modules that are:
+    #   1. present in their company's enabled_modules, AND
+    #   2. permitted by their role (see permissions.py).
+    enabled_modules = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of enabled module slugs, e.g. ["bi_dashboard", "datasets"]',
+    )
+
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -17,6 +45,26 @@ class Company(models.Model):
 
     def __str__(self):
         return self.name
+
+    def has_module(self, module_id: str) -> bool:
+        """Return True if *module_id* is in this company's enabled list."""
+        return module_id in (self.enabled_modules or [])
+
+    def enable_module(self, module_id: str) -> None:
+        """Add a module to the enabled list (idempotent)."""
+        current = self.enabled_modules or []
+        if module_id not in current:
+            current.append(module_id)
+            self.enabled_modules = current
+            self.save(update_fields=["enabled_modules"])
+
+    def disable_module(self, module_id: str) -> None:
+        """Remove a module from the enabled list (idempotent)."""
+        current = self.enabled_modules or []
+        if module_id in current:
+            current.remove(module_id)
+            self.enabled_modules = current
+            self.save(update_fields=["enabled_modules"])
 
 
 class Division(models.Model):

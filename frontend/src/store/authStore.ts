@@ -10,6 +10,8 @@ interface User {
   role: 'finance' | 'sales' | 'ceo' | 'admin'
   department: string
   isStaff?: boolean
+  company_name?: string | null
+  accessible_modules?: string[]
 }
 
 interface AuthState {

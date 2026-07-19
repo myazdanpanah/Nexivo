@@ -10,6 +10,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.accounts.models import Company
 from .models import ExternalDatabase, DatabasePermission, GoogleSheetsSync
 from .encryption import encrypt_value, decrypt_value
 
@@ -40,8 +41,12 @@ class ExternalDatabaseModelTests(TestCase):
     """Test ExternalDatabase model encryption properties."""
 
     def setUp(self):
+        self.company = Company.objects.create(
+            name="Test Company",
+            enabled_modules=["bi_dashboard", "finance", "crm", "db_manager", "datasets", "llm", "settings"],
+        )
         self.user = User.objects.create_user(
-            username="admin1", password="pass123", role="admin"
+            username="admin1", password="pass123", role="admin", company=self.company
         )
 
     def test_username_password_encrypted_at_rest(self):
@@ -89,11 +94,15 @@ class DatabasePermissionTests(TestCase):
     """Test DatabasePermission model."""
 
     def setUp(self):
+        self.company = Company.objects.create(
+            name="Test Company",
+            enabled_modules=["bi_dashboard", "finance", "crm", "db_manager", "datasets", "llm", "settings"],
+        )
         self.admin = User.objects.create_user(
-            username="admin1", password="pass123", role="admin"
+            username="admin1", password="pass123", role="admin", company=self.company
         )
         self.updater = User.objects.create_user(
-            username="updater1", password="pass123", role="updater"
+            username="updater1", password="pass123", role="updater", company=self.company
         )
 
     def test_create_permission(self):
@@ -121,11 +130,15 @@ class TableOperationsTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.company = Company.objects.create(
+            name="Test Company",
+            enabled_modules=["bi_dashboard", "finance", "crm", "db_manager", "datasets", "llm", "settings"],
+        )
         self.admin = User.objects.create_user(
-            username="admin1", password="pass123", role="admin"
+            username="admin1", password="pass123", role="admin", company=self.company
         )
         self.regular = User.objects.create_user(
-            username="regular1", password="pass123", role="finance"
+            username="regular1", password="pass123", role="finance", company=self.company
         )
 
         # Create a test table
@@ -194,11 +207,15 @@ class CellEditingTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.company = Company.objects.create(
+            name="Test Company",
+            enabled_modules=["bi_dashboard", "finance", "crm", "db_manager", "datasets", "llm", "settings"],
+        )
         self.admin = User.objects.create_user(
-            username="admin1", password="pass123", role="admin"
+            username="admin1", password="pass123", role="admin", company=self.company
         )
         self.regular = User.objects.create_user(
-            username="regular1", password="pass123", role="finance"
+            username="regular1", password="pass123", role="finance", company=self.company
         )
 
         with connection.cursor() as cursor:
@@ -249,7 +266,7 @@ class CellEditingTests(TestCase):
 
     def test_cell_update_updater_with_permission(self):
         updater = User.objects.create_user(
-            username="updater1", password="pass123", role="updater"
+            username="updater1", password="pass123", role="updater", company=self.company
         )
         DatabasePermission.objects.create(
             user=updater,
@@ -272,7 +289,7 @@ class CellEditingTests(TestCase):
 
     def test_cell_update_updater_no_permission(self):
         updater = User.objects.create_user(
-            username="updater2", password="pass123", role="updater"
+            username="updater2", password="pass123", role="updater", company=self.company
         )
         self.client.force_authenticate(user=updater)
         response = self.client.patch(
@@ -312,11 +329,15 @@ class PermissionManagementTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.company = Company.objects.create(
+            name="Test Company",
+            enabled_modules=["bi_dashboard", "finance", "crm", "db_manager", "datasets", "llm", "settings"],
+        )
         self.admin = User.objects.create_user(
-            username="admin1", password="pass123", role="admin"
+            username="admin1", password="pass123", role="admin", company=self.company
         )
         self.updater = User.objects.create_user(
-            username="updater1", password="pass123", role="updater"
+            username="updater1", password="pass123", role="updater", company=self.company
         )
 
     def test_admin_can_create_permission(self):
@@ -335,7 +356,7 @@ class PermissionManagementTests(TestCase):
 
     def test_regular_user_cannot_create_permission(self):
         regular = User.objects.create_user(
-            username="regular1", password="pass123", role="finance"
+            username="regular1", password="pass123", role="finance", company=self.company
         )
         self.client.force_authenticate(user=regular)
         response = self.client.post(
@@ -368,11 +389,15 @@ class SQLExecutorTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.company = Company.objects.create(
+            name="Test Company",
+            enabled_modules=["bi_dashboard", "finance", "crm", "db_manager", "datasets", "llm", "settings"],
+        )
         self.admin = User.objects.create_user(
-            username="admin1", password="pass123", role="admin"
+            username="admin1", password="pass123", role="admin", company=self.company
         )
         self.regular = User.objects.create_user(
-            username="regular1", password="pass123", role="finance"
+            username="regular1", password="pass123", role="finance", company=self.company
         )
 
     def test_admin_can_execute_sql(self):
@@ -411,8 +436,12 @@ class GoogleSheetsSyncTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.company = Company.objects.create(
+            name="Test Company",
+            enabled_modules=["bi_dashboard", "finance", "crm", "db_manager", "datasets", "llm", "settings"],
+        )
         self.admin = User.objects.create_user(
-            username="admin1", password="pass123", role="admin"
+            username="admin1", password="pass123", role="admin", company=self.company
         )
 
     def test_create_sync_config(self):
@@ -465,11 +494,15 @@ class DatabaseManagementTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.company = Company.objects.create(
+            name="Test Company",
+            enabled_modules=["bi_dashboard", "finance", "crm", "db_manager", "datasets", "llm", "settings"],
+        )
         self.admin = User.objects.create_user(
-            username="admin1", password="pass123", role="admin"
+            username="admin1", password="pass123", role="admin", company=self.company
         )
         self.regular = User.objects.create_user(
-            username="regular1", password="pass123", role="finance"
+            username="regular1", password="pass123", role="finance", company=self.company
         )
 
     def test_admin_can_create_database(self):

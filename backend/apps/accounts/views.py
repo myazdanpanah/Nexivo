@@ -6,10 +6,10 @@ from django.db import models
 from .authentication import JWTAuthentication
 from .serializers import (
     LoginSerializer, RegisterSerializer, UserSerializer,
-    CompanySerializer, DivisionSerializer, TeamSerializer,
+    CompanySerializer, CompanyModulesSerializer, DivisionSerializer, TeamSerializer,
     CustomRoleSerializer,
 )
-from .models import Company, Division, Team, CustomRole
+from .models import Company, Division, Team, CustomRole, MODULE_CHOICES, ALL_MODULE_IDS
 
 User = get_user_model()
 
@@ -413,3 +413,51 @@ def role_detail(request, pk):
     elif request.method == "DELETE":
         role.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---- Module Management (admin/CEO only) ----
+
+@api_view(["GET", "PUT"])
+def company_modules(request, pk):
+    """Get or update the enabled modules for a company."""
+    if not _is_admin_or_ceo(request.user):
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        company = Company.objects.get(pk=pk)
+    except Company.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "GET":
+        return Response(CompanyModulesSerializer(company).data)
+    elif request.method == "PUT":
+        modules = request.data.get("enabled_modules", [])
+        # Validate: only allow known module IDs
+        invalid = [m for m in modules if m not in ALL_MODULE_IDS]
+        if invalid:
+            return Response(
+                {"error": f"Unknown modules: {', '.join(invalid)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        company.enabled_modules = modules
+        company.save(update_fields=["enabled_modules"])
+        return Response(CompanyModulesSerializer(company).data)
+
+
+@api_view(["GET"])
+def user_modules(request):
+    """Return the modules the current user can access."""
+    user = request.user
+    if user.is_staff:
+        modules = ALL_MODULE_IDS
+    elif user.company:
+        modules = user.company.enabled_modules or []
+    else:
+        modules = []
+    # Return module details
+    module_map = {m[0]: m[1] for m in MODULE_CHOICES}
+    result = [
+        {"id": mid, "label": module_map.get(mid, mid)}
+        for mid in modules
+        if mid in module_map
+    ]
+    return Response(result)

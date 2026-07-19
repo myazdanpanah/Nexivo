@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: nexivo
       POSTGRES_USER: nexivo_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexivo_pass}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -25,7 +25,7 @@ services:
     image: apache/superset:3.1.0
     container_name: nexivo_superset
     environment:
-      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-supersecretkey123}
       SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
     volumes:
       - ./superset_config.py:/app/pythonpath/superset_config.py
@@ -48,12 +48,12 @@ services:
       - SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-change-me}
       - POSTGRES_DB=nexivo
       - POSTGRES_USER=nexivo_user
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_PASSWORD=nexivo_pass
       - DB_HOST=postgres
       - DB_PORT=5432
       - REDIS_URL=redis://redis:6379/0
       - SUPERSET_API_URL=http://superset:8088/api/v1
-      - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY}
+      - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY:-supersecretkey123}
     volumes:
       - ./backend:/app
       - static_volume:/app/static
@@ -73,7 +73,7 @@ services:
     build: ./backend
     container_name: nexivo_celery
     environment:
-      - DATABASE_URL=postgresql://nexivo_user:${POSTGRES_PASSWORD}@postgres:5432/nexivo
+      - DATABASE_URL=postgresql://nexivo_user:${POSTGRES_PASSWORD:-nexivo_pass}@postgres:5432/nexivo
       - REDIS_URL=redis://redis:6379/0
     volumes:
       - ./backend:/app

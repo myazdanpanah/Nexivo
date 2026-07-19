@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Company, Division, Team, CustomRole
+from .models import Company, Division, Team, CustomRole, MODULE_CHOICES, ALL_MODULE_IDS
 
 User = get_user_model()
 
@@ -10,6 +10,7 @@ class UserSerializer(serializers.ModelSerializer):
     division_name = serializers.CharField(source='division.name', read_only=True, default=None)
     team_name = serializers.CharField(source='team.name', read_only=True, default=None)
     reports_to_name = serializers.SerializerMethodField()
+    accessible_modules = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -20,6 +21,7 @@ class UserSerializer(serializers.ModelSerializer):
             "division", "division_name",
             "team", "team_name",
             "reports_to", "reports_to_name",
+            "accessible_modules",
         ]
         read_only_fields = ["id"]
 
@@ -28,6 +30,16 @@ class UserSerializer(serializers.ModelSerializer):
             return f"{obj.reports_to.first_name} {obj.reports_to.last_name}".strip() or obj.reports_to.username
         return None
 
+    def get_accessible_modules(self, obj):
+        """Return the list of module slugs this user can access."""
+        if obj.is_staff:
+            return ALL_MODULE_IDS
+        if not obj.company:
+            return []
+        enabled = obj.company.enabled_modules or []
+        # TODO: filter by role when per-module role gates are added
+        return enabled
+
 
 class CompanySerializer(serializers.ModelSerializer):
     division_count = serializers.SerializerMethodField()
@@ -35,7 +47,11 @@ class CompanySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Company
-        fields = ["id", "name", "description", "is_active", "division_count", "employee_count", "created_at"]
+        fields = [
+            "id", "name", "description", "is_active",
+            "enabled_modules",
+            "division_count", "employee_count", "created_at",
+        ]
         read_only_fields = ["id", "created_at"]
 
     def get_division_count(self, obj):
@@ -43,6 +59,19 @@ class CompanySerializer(serializers.ModelSerializer):
 
     def get_employee_count(self, obj):
         return obj.employees.count()
+
+
+class CompanyModulesSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for the modules-only update endpoint."""
+    all_modules = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Company
+        fields = ["id", "enabled_modules", "all_modules"]
+        read_only_fields = ["id"]
+
+    def get_all_modules(self, obj):
+        return [{"id": m[0], "label": m[1]} for m in MODULE_CHOICES]
 
 
 class DivisionSerializer(serializers.ModelSerializer):

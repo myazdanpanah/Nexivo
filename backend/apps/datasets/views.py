@@ -12,12 +12,32 @@ from apps.dashboards.models import DashboardAssignment, PermissionAuditLog
 from .serializers import DatasetSerializer, DatasetUploadSerializer
 from .parsers import parse_excel_file, generate_table_name, create_table_from_dataframe
 
+
+from apps.accounts.permissions import RequireModule
+
+# Module gate: all datasets endpoints require 'datasets'
+_DatasetsPerm = RequireModule.for_module("datasets")()
+
+
+def _check_datasets_module(request):
+    """Return None if OK, or a 403 Response if the module is not enabled."""
+    if not _DatasetsPerm.has_permission(request, None):
+        return Response(
+            {"error": "Module 'datasets' is not enabled for your company"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
 logger = logging.getLogger(__name__)
 
 
 @api_view(["GET"])
 def dataset_list(request):
     """List datasets accessible to the current user's role."""
+    gate = _check_datasets_module(request)
+    if gate:
+        return gate
     datasets = Dataset.objects.filter(status="ready")
 
     # Role-based filtering: users only see datasets for their role
@@ -49,6 +69,9 @@ def _register_in_superset(dataset):
 @api_view(["POST"])
 def dataset_upload(request):
     """Upload an Excel/CSV file and create a dataset."""
+    gate = _check_datasets_module(request)
+    if gate:
+        return gate
     serializer = DatasetUploadSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
@@ -106,6 +129,9 @@ def dataset_upload(request):
 @api_view(["GET", "PUT", "DELETE"])
 def dataset_detail(request, pk):
     """Retrieve, update, or delete a dataset."""
+    gate = _check_datasets_module(request)
+    if gate:
+        return gate
     try:
         dataset = Dataset.objects.get(pk=pk)
     except Dataset.DoesNotExist:
@@ -160,6 +186,9 @@ def dataset_query(request, pk):
 
     When *metrics* is empty/absent it returns raw rows (unchanged behaviour).
     """
+    gate = _check_datasets_module(request)
+    if gate:
+        return gate
     try:
         dataset = Dataset.objects.get(pk=pk)
     except Dataset.DoesNotExist:
@@ -444,6 +473,9 @@ def superset_health(request):
     Check Superset connectivity and report sync status of all datasets.
     Returns: { status, superset_url, datasets: [{id, name, synced, superset_id}] }
     """
+    gate = _check_datasets_module(request)
+    if gate:
+        return gate
     if request.user.role not in ("ceo", "admin") and not request.user.is_staff:
         return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 
@@ -483,6 +515,9 @@ def superset_sync_dataset(request, pk):
     """
     Sync a single dataset to Superset (register if missing, update if exists).
     """
+    gate = _check_datasets_module(request)
+    if gate:
+        return gate
     if request.user.role not in ("ceo", "admin") and not request.user.is_staff:
         return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 
@@ -524,6 +559,9 @@ def superset_sync_all(request):
     Bulk-sync all unsynced datasets to Superset in one call.
     Returns: { synced: int, skipped: int, errors: [...] }
     """
+    gate = _check_datasets_module(request)
+    if gate:
+        return gate
     if request.user.role not in ("ceo", "admin") and not request.user.is_staff:
         return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 

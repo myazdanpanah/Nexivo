@@ -17,6 +17,20 @@ from .serializers import (
     DashboardAssignmentCreateSerializer,
 )
 
+# ─── Module gate: all dashboard endpoints require 'bi_dashboard' ───
+from apps.accounts.permissions import RequireModule
+_DashboardPerm = RequireModule.for_module("bi_dashboard")()
+
+
+def _check_dashboard_module(request):
+    """Return None if OK, or a 403 Response if the module is not enabled."""
+    if not _DashboardPerm.has_permission(request, None):
+        return Response(
+            {"error": "Module 'bi_dashboard' is not enabled for your company"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
 
 def _user_can_edit_dashboard(request, dashboard):
     """Owner, or a role in allowed_roles, or CEO/Admin/staff. False otherwise."""
@@ -141,6 +155,9 @@ DASHBOARD_TEMPLATES = {
 @api_view(["GET"])
 def dashboard_templates(request):
     """List available dashboard templates."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     templates = []
     for key, tmpl in DASHBOARD_TEMPLATES.items():
         templates.append({
@@ -159,6 +176,9 @@ logger = logging.getLogger(__name__)
 @api_view(["POST"])
 def dashboard_create_from_template(request):
     """Create a dashboard from a template."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     template_id = request.data.get("template_id")
     if template_id not in DASHBOARD_TEMPLATES:
         logger.warning("Invalid template_id=%s from user=%s", template_id, request.user)
@@ -221,6 +241,9 @@ def dashboard_create_from_template(request):
 @api_view(["GET", "POST"])
 def dashboard_list(request):
     """List dashboards or create a new one."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     if request.method == "GET":
         if request.user.role in ("ceo", "admin") or request.user.is_staff:
             # CEO/admin sees all published dashboards
@@ -266,6 +289,9 @@ def dashboard_list(request):
 @api_view(["GET", "PUT", "DELETE"])
 def dashboard_detail(request, pk):
     """Retrieve, update, or delete a dashboard."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         dashboard = Dashboard.objects.get(pk=pk)
     except Dashboard.DoesNotExist:
@@ -296,6 +322,9 @@ def dashboard_detail(request, pk):
 @api_view(["PUT"])
 def dashboard_layout(request, pk):
     """Update the grid layout of a dashboard page."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         dashboard = Dashboard.objects.get(pk=pk)
     except Dashboard.DoesNotExist:
@@ -350,6 +379,9 @@ def dashboard_layout(request, pk):
 @api_view(["PUT"])
 def dashboard_filter_controls(request, pk):
     """Persist dashboard-level filter controls."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         dashboard = Dashboard.objects.get(pk=pk)
     except Dashboard.DoesNotExist:
@@ -372,6 +404,9 @@ def dashboard_filter_controls(request, pk):
 @api_view(["POST"])
 def page_create(request, dashboard_pk):
     """Add a page to a dashboard."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         dashboard = Dashboard.objects.get(pk=dashboard_pk)
     except Dashboard.DoesNotExist:
@@ -408,6 +443,9 @@ def page_create(request, dashboard_pk):
 @api_view(["GET", "PUT", "DELETE"])
 def page_detail(request, dashboard_pk, page_pk):
     """Retrieve, update, or delete a page."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         dashboard = Dashboard.objects.get(pk=dashboard_pk)
         page = DashboardPage.objects.get(pk=page_pk, dashboard_id=dashboard_pk)
@@ -459,6 +497,9 @@ def page_detail(request, dashboard_pk, page_pk):
 @api_view(["POST"])
 def page_duplicate(request, dashboard_pk, page_pk):
     """Duplicate a page with all its widgets."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         dashboard = Dashboard.objects.get(pk=dashboard_pk)
     except Dashboard.DoesNotExist:
@@ -523,6 +564,9 @@ def page_duplicate(request, dashboard_pk, page_pk):
 @api_view(["PUT"])
 def page_reorder(request, dashboard_pk):
     """Reorder pages in a dashboard."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         dashboard = Dashboard.objects.get(pk=dashboard_pk)
     except Dashboard.DoesNotExist:
@@ -550,6 +594,9 @@ def page_reorder(request, dashboard_pk):
 @api_view(["GET"])
 def page_export(request, dashboard_pk, page_pk):
     """Export a page as JSON."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         dashboard = Dashboard.objects.get(pk=dashboard_pk)
         page = DashboardPage.objects.get(pk=page_pk, dashboard_id=dashboard_pk)
@@ -568,6 +615,9 @@ def page_export(request, dashboard_pk, page_pk):
 @api_view(["POST"])
 def page_import(request, dashboard_pk):
     """Import a page from JSON data."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         dashboard = Dashboard.objects.get(pk=dashboard_pk)
     except Dashboard.DoesNotExist:
@@ -617,6 +667,9 @@ def page_import(request, dashboard_pk):
 @api_view(["POST"])
 def widget_create(request, dashboard_pk):
     """Add a widget to a dashboard."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         dashboard = Dashboard.objects.get(pk=dashboard_pk)
     except Dashboard.DoesNotExist:
@@ -641,6 +694,9 @@ def widget_create(request, dashboard_pk):
 @api_view(["GET", "PUT", "DELETE"])
 def widget_detail(request, dashboard_pk, widget_pk):
     """Retrieve, update, or delete a widget."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         dashboard = Dashboard.objects.get(pk=dashboard_pk)
         widget = Widget.objects.get(pk=widget_pk, dashboard_id=dashboard_pk)
@@ -681,6 +737,9 @@ def widget_detail(request, dashboard_pk, widget_pk):
 @api_view(["POST"])
 def dashboard_duplicate(request, pk):
     """Duplicate a dashboard with all its pages and widgets."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         source = Dashboard.objects.get(pk=pk)
     except Dashboard.DoesNotExist:
@@ -761,6 +820,9 @@ def dashboard_duplicate(request, pk):
 @api_view(["PUT"])
 def dashboard_share(request, pk):
     """Update allowed_roles for a dashboard (share with roles)."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         dashboard = Dashboard.objects.get(pk=pk)
     except Dashboard.DoesNotExist:
@@ -834,6 +896,9 @@ def audit_log_list(request):
 @api_view(["GET", "POST"])
 def assignment_list_create(request):
     """List assignments (for a dashboard or all for admin) or create a new one."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     if request.user.role not in ("admin", "ceo") and not request.user.is_staff:
         # Managers can see/assign dashboards they own
         pass
@@ -913,6 +978,9 @@ def assignment_list_create(request):
 @api_view(["GET", "PUT", "DELETE"])
 def assignment_detail(request, pk):
     """Retrieve, update, or delete an assignment."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     try:
         assignment = DashboardAssignment.objects.select_related(
             "dashboard", "assigned_to", "assigned_by"
@@ -989,6 +1057,9 @@ def assignment_detail(request, pk):
 @api_view(["GET"])
 def my_assigned_dashboards(request):
     """List dashboards assigned to the current user."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     assignments = DashboardAssignment.objects.select_related(
         "dashboard", "assigned_to", "assigned_by"
     ).filter(
@@ -1039,6 +1110,9 @@ def assignment_bulk_create(request):
       visible_pages: list (optional, applied to all)
       notes: str (optional)
     """
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     if request.user.role not in ("admin", "ceo") and not request.user.is_staff:
         return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 
@@ -1163,6 +1237,9 @@ def assignment_bulk_create(request):
 @api_view(["DELETE"])
 def dashboard_clear_all(request):
     """Delete all dashboards, pages, and widgets (superuser only)."""
+    gate = _check_dashboard_module(request)
+    if gate:
+        return gate
     if not request.user.is_staff:
         return Response(
             {"error": "Only superusers can clear all data"},
@@ -1210,6 +1287,7 @@ def _notify(recipient, notification_type, title, message="", target_type="", tar
 @api_view(["GET"])
 def notification_list(request):
     """List notifications for the current user."""
+    # Notifications are user-scoped, not dashboard-module-dependent
     notifications = Notification.objects.filter(recipient=request.user)[:50]
     unread_count = Notification.objects.filter(recipient=request.user, is_read=False).count()
     data = []

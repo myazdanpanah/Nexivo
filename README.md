@@ -4,7 +4,7 @@
 
 ### نکسیوو — پلتفرم داشبورد هوشمند
 
-**An intelligent dashboard platform for building, visualizing, and sharing business data — with full RTL (Persian/Farsi) support and role-based access control.**
+**A modular SaaS platform for business intelligence, finance, database management, and AI — with full RTL (Persian/Farsi) support and role-based access control.**
 
 [![CI](https://github.com/myazdanpanah/Nexivo/actions/workflows/tests.yml/badge.svg)](https://github.com/myazdanpanah/Nexivo/actions/workflows/tests.yml)
 [![License: Pro](https://img.shields.io/badge/License-Nexivo%20Pro-purple.svg)](LICENSE)
@@ -40,13 +40,16 @@
 
 ## What is Nexivo?
 
-Nexivo is a self-hosted Business Intelligence platform that lets you:
+Nexivo is a modular, self-hosted SaaS platform that lets you:
 
-1. **Upload** Excel/CSV data files — they are automatically parsed, cleaned, and stored in PostgreSQL tables.
+1. **Upload** Excel/CSV data files — automatically parsed, cleaned, and stored in PostgreSQL tables.
 2. **Build interactive dashboards** with a drag-and-drop grid layout, multiple pages, and charts powered by Apache ECharts.
-3. **Enforce data security** with role-based access control (CEO, Finance, Sales, Admin) and PostgreSQL Row-Level Security.
-4. **Visualize data** through bar, line, pie, area, scatter, table, KPI, gauge, heatmap, treemap, and more — all rendered with full RTL support for Persian/Farsi.
-5. **Filter and slice data** with Looker Studio-style dashboard-level and widget-level filters (dropdown, date range, text search, checkbox, slider).
+3. **Manage finances** with Iranian accounting standards (Kol → Moin → Tafzili), invoices, receipts, payments, cheques, and journal vouchers.
+4. **Connect to databases** — browse, edit, and query external databases with encryption, permissions, and a SQL editor.
+5. **Use AI** — unified LLM gateway supporting Ollama, OpenAI, Gemini, and Anthropic with encrypted API keys and rate limiting.
+6. **Enforce data security** with company-level module gating, role-based access control (CEO, Finance, Sales, Admin), and PostgreSQL Row-Level Security.
+7. **Visualize data** through bar, line, pie, area, scatter, table, KPI, gauge, heatmap, treemap, and more — all rendered with full RTL support for Persian/Farsi.
+8. **Filter and slice data** with Looker Studio-style dashboard-level and widget-level filters (dropdown, date range, text search, checkbox, slider).
 
 ---
 
@@ -54,17 +57,18 @@ Nexivo is a self-hosted Business Intelligence platform that lets you:
 
 | Category | Details |
 |---|---|
-| **Data Upload** | Drag-and-drop Excel (.xlsx/.xls) and CSV file upload with automatic parsing and PostgreSQL table creation |
-| **Dashboard Builder** | Drag-and-drop responsive grid layout using `react-grid-layout`; resize, reorder, and configure widgets |
+| **Module System** | Pluggable module architecture — companies enable/disable modules (BI Dashboard, Finance, CRM, DB Manager, Data Upload, LLM, Settings) |
+| **BI Dashboard** | Drag-and-drop responsive grid layout using `react-grid-layout`; resize, reorder, and configure widgets |
 | **Multi-Page Dashboards** | Create multiple pages within a single dashboard with tab navigation, drag-and-drop page reordering, page duplication, and per-page filters |
 | **Charts** | Bar, Horizontal Bar, Line, Pie, Area, Scatter, Data Table, KPI Card, Gauge, Heatmap, Tree Map, Sankey, Funnel, Radar, Graph, Map — powered by Apache ECharts |
-| **Chart Styling** | Background color/image, text color picker, color wheel/picker for widget backgrounds |
-| **Sort & Limit** | Sort charts by max/min values, limit bar count for impressive visualizations |
+| **Finance Module** | Iranian accounting standards (Kol → Moin → Tafzili hierarchy), invoices, receipts, payments, cheques, journal vouchers, customers, suppliers |
+| **Database Manager** | Browse, edit, and query external databases; SQL editor; file import; Google Sheets sync; cell editing with permissions |
+| **LLM Gateway** | Unified AI gateway supporting Ollama, OpenAI, Gemini, Anthropic; encrypted API keys, rate limiting, chat history, usage tracking |
+| **Data Upload** | Drag-and-drop Excel (.xlsx/.xls) and CSV file upload with automatic parsing and PostgreSQL table creation |
 | **Dark Theme** | System-wide dark/light mode toggle, persisted in localStorage |
 | **RTL Support** | Full right-to-left layout for Persian/Farsi, including the Vazirmatn font and ECharts RTL configuration |
 | **Dashboard-Level Filters** | Looker Studio-style filter bar with dropdown, date range, text search, checkbox, and slider controls — persisted to backend |
 | **Widget-Level Filters** | Per-widget filter configuration with operators (eq, neq, contains, gt, lt, between, in, starts_with, ends_with) |
-| **Dataset-Aware Filtering** | Filters automatically match by dataset — a filter on Dataset A won't affect widgets from Dataset B |
 | **Cross-Chart Filtering** | Click on a chart element to filter other charts in the dashboard |
 | **Drill-Down** | Table widgets support click-to-drill-down with breadcrumb navigation |
 | **Data Aggregation** | Automatic GROUP BY with SUM/COUNT/COUNT_DISTINCT/AVG/MIN/MAX; date grouping by year/quarter/month/week/day/hour |
@@ -176,40 +180,28 @@ Nexivo is a self-hosted Business Intelligence platform that lets you:
 Nexivo/
 ├── backend/                      # Django REST API
 │   ├── apps/
-│   │   ├── accounts/             # User auth, roles, JWT
+│   │   ├── accounts/             # Auth, users, org hierarchy, module management
+│   │   ├── dashboards/           # BI Dashboard module
 │   │   ├── datasets/             # Data upload & querying
-│   │   └── dashboards/           # Dashboard, pages & widget management
-│   │       ├── models.py         # Dashboard, DashboardPage, Widget models
-│   │       ├── views.py          # CRUD, layout, page, widget endpoints
-│   │       └── serializers.py
+│   │   ├── db_manager/           # Database management & SQL editor
+│   │   ├── finance/              # Iranian accounting (Kol/Tafzili/Invoices/etc.)
+│   │   └── llm/                  # LLM Gateway (Ollama/OpenAI/Gemini/Anthropic)
 │   ├── nexivo/                   # Django project config
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                     # React SPA
 │   ├── src/
-│   │   ├── api/client.ts         # Axios instance with JWT interceptor
-│   │   ├── components/
-│   │   │   ├── ChartWidget.tsx    # ECharts rendering (all chart types)
-│   │   │   ├── DashboardFilterBar.tsx  # Looker Studio-style filter controls
-│   │   │   ├── PageNavBar.tsx     # Multi-page tab navigation with D&D
-│   │   │   └── WidgetConfigPanel.tsx   # Widget settings panel
+│   │   ├── api/                  # API clients (finance.ts, llm.ts, dbManager.ts)
+│   │   ├── components/           # Shared UI components
 │   │   ├── pages/
-│   │   │   ├── LoginPage.tsx
-│   │   │   ├── DashboardListPage.tsx
-│   │   │   ├── DashboardBuilderPage.tsx  # Grid layout editor
-│   │   │   └── DataUploadPage.tsx  # File upload with dropzone
-│   │   ├── store/
-│   │   │   ├── authStore.ts      # Zustand auth state
-│   │   │   └── dashboardStore.ts # Zustand dashboard state (pages, filters)
-│   │   └── utils/
-│   │       ├── chartDefaults.ts
-│   │       ├── kpiFormat.ts
-│   │       └── rtlConfig.ts
+│   │   │   ├── finance/          # Finance module pages (10 pages)
+│   │   │   ├── LLMSettingsPage.tsx  # AI provider management
+│   │   │   ├── LauncherPage.tsx  # Module tile launcher
+│   │   │   ├── SettingsPage.tsx  # Module toggle + org structure
+│   │   │   └── ... (other pages)
+│   │   └── store/                # Zustand state stores
 │   ├── package.json
-│   ├── vite.config.ts
-│   ├── tailwind.config.js
 │   └── Dockerfile
-├── superset_config.py
 ├── docker-compose.yml
 ├── Makefile
 └── README.md
@@ -331,6 +323,47 @@ All endpoints are prefixed with `/api/v1/`.
 | `POST` | `/api/v1/dashboards/:id/widgets/` | Add a widget (to a page) |
 | `PUT` | `/api/v1/dashboards/:id/widgets/:wid/` | Update a widget |
 | `DELETE` | `/api/v1/dashboards/:id/widgets/:wid/` | Delete a widget |
+
+### Finance
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/finance/dashboard/` | Summary KPIs |
+| `GET/POST` | `/api/v1/finance/kols/` | Chart of Accounts |
+| `GET/POST` | `/api/v1/finance/invoices/` | Invoices |
+| `GET/POST` | `/api/v1/finance/receipts/` | Receipts |
+| `GET/POST` | `/api/v1/finance/payments/` | Payments |
+| `GET/POST` | `/api/v1/finance/cheques/` | Cheques |
+| `GET/POST` | `/api/v1/finance/vouchers/` | Journal Vouchers |
+| `GET/POST` | `/api/v1/finance/customers/` | Customers |
+| `GET/POST` | `/api/v1/finance/suppliers/` | Suppliers |
+
+### Database Manager
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET/POST` | `/api/v1/db-manager/databases/` | List/create database connections |
+| `GET` | `/api/v1/db-manager/tables/:source/` | List tables |
+| `GET` | `/api/v1/db-manager/tables/:source/:table/data/` | Browse table data |
+| `POST` | `/api/v1/db-manager/sql/` | Execute SQL (admin/CEO only) |
+| `POST` | `/api/v1/db-manager/import/` | Import file to new table |
+
+### LLM Gateway
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET/POST` | `/api/v1/llm/providers/` | List/create LLM providers |
+| `POST` | `/api/v1/llm/providers/:id/activate/` | Set active provider |
+| `POST` | `/api/v1/llm/providers/test/` | Test provider connection |
+| `POST` | `/api/v1/llm/chat/` | Send chat message |
+| `GET` | `/api/v1/llm/usage/` | Usage statistics |
+
+### Module Management
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/auth/user-modules/` | Get enabled modules for current user |
+| `PUT` | `/api/v1/auth/company/modules/` | Update company enabled modules (CEO only) |
 
 ---
 

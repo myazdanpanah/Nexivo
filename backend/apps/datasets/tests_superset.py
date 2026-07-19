@@ -10,6 +10,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.accounts.models import Company
 from .models import Dataset, DataFilter
 
 User = get_user_model()
@@ -20,14 +21,18 @@ class SupersetHealthTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.company = Company.objects.create(
+            name="Test Company",
+            enabled_modules=["bi_dashboard", "finance", "crm", "db_manager", "datasets", "llm", "settings"],
+        )
         self.admin = User.objects.create_user(
-            username="admin", password="testpass123", role="admin", is_staff=True
+            username="admin", password="testpass123", role="admin", is_staff=True, company=self.company
         )
         self.ceo = User.objects.create_user(
-            username="ceo", password="testpass123", role="ceo"
+            username="ceo", password="testpass123", role="ceo", company=self.company
         )
         self.regular = User.objects.create_user(
-            username="regular", password="testpass123", role="sales"
+            username="regular", password="testpass123", role="sales", company=self.company
         )
         self.dataset = Dataset.objects.create(
             name="Test DS",
@@ -96,11 +101,15 @@ class SupersetSyncDatasetTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.company = Company.objects.create(
+            name="Test Company",
+            enabled_modules=["bi_dashboard", "finance", "crm", "db_manager", "datasets", "llm", "settings"],
+        )
         self.admin = User.objects.create_user(
-            username="admin", password="testpass123", role="admin", is_staff=True
+            username="admin", password="testpass123", role="admin", is_staff=True, company=self.company
         )
         self.regular = User.objects.create_user(
-            username="regular", password="testpass123", role="sales"
+            username="regular", password="testpass123", role="sales", company=self.company
         )
         self.dataset = Dataset.objects.create(
             name="Test DS",
@@ -160,8 +169,12 @@ class SupersetSyncAllTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.company = Company.objects.create(
+            name="Test Company",
+            enabled_modules=["bi_dashboard", "finance", "crm", "db_manager", "datasets", "llm", "settings"],
+        )
         self.admin = User.objects.create_user(
-            username="admin", password="testpass123", role="admin", is_staff=True
+            username="admin", password="testpass123", role="admin", is_staff=True, company=self.company
         )
         self.url = reverse("superset-sync-all")
         self.ds1 = Dataset.objects.create(
@@ -220,8 +233,12 @@ class DataFilterSyncTests(TestCase):
     """Tests for DataFilter.save() auto-sync to Superset RLS."""
 
     def setUp(self):
+        self.company = Company.objects.create(
+            name="Test Company",
+            enabled_modules=["bi_dashboard", "finance", "crm", "db_manager", "datasets", "llm", "settings"],
+        )
         self.admin = User.objects.create_user(
-            username="admin", password="testpass123", role="admin", is_staff=True
+            username="admin", password="testpass123", role="admin", is_staff=True, company=self.company
         )
         self.dataset = Dataset.objects.create(
             name="Test DS", table_name="test_table", status="ready",

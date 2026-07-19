@@ -20,7 +20,7 @@ export default function LoginPage() {
     try {
       const res = await api.post('/auth/login/', { username, password })
       setAuth(res.data.token, { ...res.data.user, isStaff: res.data.user.is_staff })
-      navigate('/dashboards')
+      navigate('/')
     } catch (err: unknown) {
       let message = 'خطای ورود'
       if (err instanceof Error) {
