@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "apps.finance.apps.FinanceConfig",
     "apps.llm.apps.LlmConfig",
     "apps.manufacturing.apps.ManufacturingConfig",
+    "apps.workflow.apps.WorkflowConfig",
 ]
 
 MIDDLEWARE = [
