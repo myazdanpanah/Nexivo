@@ -52,12 +52,11 @@ Unlike traditional BI tools that only handle dashboards, or accounting software 
 | **Business Intelligence** | Drag-and-drop dashboards, KPIs, charts, data visualization, cross-chart filtering, drill-down |
 | **Finance & Accounting** | Iranian accounting standards (Kol → Moin → Tafzili), invoices, receipts, payments, cheques, journal vouchers |
 | **Database Management** | Browse, edit, query, and sync external databases with a built-in SQL editor |
-| **CRM & Customer Management** | Customer and supplier records, relationship tracking, contact management |
+| **CRM & Customer Management** | Customer and supplier records with finance module integration |
 | **AI Integration** | Unified LLM gateway supporting multiple AI providers with encryption, rate limiting, and chat history |
 | **Data Import & Processing** | Excel/CSV upload with automatic parsing, cleaning, and PostgreSQL table creation |
 | **Organization Management** | Company → Division → Team hierarchy, org chart visualization, role-based access |
 | **Module System** | Enable/disable modules per organization — only activate what you need |
-| **Government Workflows** | Customizable approval chains, document management, workflow automation |
 
 ---
 
@@ -65,7 +64,7 @@ Unlike traditional BI tools that only handle dashboards, or accounting software 
 
 Traditional software forces organizations to adopt rigid workflows. Nexivo takes a fundamentally different approach:
 
-1. **Modular Architecture** — Enable only the modules your organization needs. A small business might use Finance + BI, while a government agency might use Datasets + Workflows + LLM.
+1. **Modular Architecture** — Enable only the modules your organization needs. A small business might use Finance + BI, while a larger organization might use all available modules.
 
 2. **Fully Customizable** — Every organization is unique. Nexivo's module system, role-based access, and customizable dashboards let you tailor the platform to your exact needs.
 
@@ -464,6 +463,8 @@ Nexivo uses a **pluggable module architecture**. Each organization enables/disab
 - **Modules can be toggled live** — Enable a new module without downtime
 - **Access is granular** — Each module has its own API endpoints and permissions
 
+### Implemented Modules
+
 | Module | Endpoint Prefix | Description |
 |---|---|---|
 | `bi_dashboard` | `/api/v1/dashboards/` | Drag-and-drop BI dashboards with ECharts |
@@ -472,6 +473,19 @@ Nexivo uses a **pluggable module architecture**. Each organization enables/disab
 | `datasets` | `/api/v1/datasets/` | Excel/CSV upload and PostgreSQL table creation |
 | `llm` | `/api/v1/llm/` | Unified AI gateway (Ollama/OpenAI/Gemini/Anthropic) |
 | `settings` | `/api/v1/auth/company/` | Module toggle + organization hierarchy management |
+
+### Roadmap — Planned Modules
+
+| Module | Description | Status |
+|---|---|---|
+| `crm` | Dedicated CRM with lead tracking, pipeline management, contact history | 🔜 Planned |
+| `workflows` | Customizable approval chains, document management, task automation | 🔜 Planned |
+| `hr` | Employee management, attendance, leave, payroll | 🔜 Planned |
+| `inventory` | Stock management, warehouses, purchase orders | 🔜 Planned |
+| `project` | Project management with tasks, milestones, Gantt charts | 🔜 Planned |
+| `reports` | Scheduled reports, email delivery, PDF generation | 🔜 Planned |
+| `audit` | Audit logging, compliance tracking, change history | 🔜 Planned |
+| `notifications` | Email/SMS notifications, in-app alerts, webhook integrations | 🔜 Planned |
 
 ---
 
