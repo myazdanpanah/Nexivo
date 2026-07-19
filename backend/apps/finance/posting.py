@@ -39,6 +39,17 @@ class PostingEngine:
     """
 
     @staticmethod
+    def _get_kol_account(company, code: str) -> KolAccount:
+        """Safely get a Kol account, raising ValidationError if not found."""
+        kol = KolAccount.objects.filter(company=company, code=code).first()
+        if not kol:
+            raise ValidationError(
+                f"حساب کل با کد '{code}' در سرفصل حساب‌ها یافت نشد. "
+                f"لطفاً ابتدا سرفصل حساب‌ها را تکمیل کنید."
+            )
+        return kol
+
+    @staticmethod
     def _next_voucher_number(company, fiscal_year_id: int) -> int:
         """Calculate next sequential voucher number per fiscal year."""
         last = JournalVoucher.objects.filter(
@@ -83,7 +94,7 @@ class PostingEngine:
             # Debit: Customer Receivable (131)
             customer_tafzili = invoice.customer.tafzili if invoice.customer else None
             entries.append({
-                "kol": KolAccount.objects.filter(company=company, code="131").first(),
+                "kol": PostingEngine._get_kol_account(company, "131"),
                 "tafzili": customer_tafzili,
                 "description": f"فاکتور فروش شماره {invoice.number}",
                 "debit": invoice.total,
@@ -91,7 +102,7 @@ class PostingEngine:
             })
             # Credit: Sales Revenue (401)
             entries.append({
-                "kol": KolAccount.objects.filter(company=company, code="401").first(),
+                "kol": PostingEngine._get_kol_account(company, "401"),
                 "description": f"درآمد فروش فاکتور {invoice.number}",
                 "debit": 0,
                 "credit": invoice.subtotal,
@@ -99,7 +110,7 @@ class PostingEngine:
             # Credit: VAT Payable (341)
             if invoice.tax_amount > 0:
                 entries.append({
-                    "kol": KolAccount.objects.filter(company=company, code="341").first(),
+                    "kol": PostingEngine._get_kol_account(company, "341"),
                     "description": f"مالیات بر ارزش افزوده فاکتور {invoice.number}",
                     "debit": 0,
                     "credit": invoice.tax_amount,
@@ -107,7 +118,7 @@ class PostingEngine:
         elif invoice.type == "purchase":
             # Debit: Inventory / Expense (111)
             entries.append({
-                "kol": KolAccount.objects.filter(company=company, code="111").first(),
+                "kol": PostingEngine._get_kol_account(company, "111"),
                 "description": f"خرید فاکتور شماره {invoice.number}",
                 "debit": invoice.subtotal,
                 "credit": 0,
@@ -115,7 +126,7 @@ class PostingEngine:
             # Debit: Input VAT (133)
             if invoice.tax_amount > 0:
                 entries.append({
-                    "kol": KolAccount.objects.filter(company=company, code="133").first(),
+                    "kol": PostingEngine._get_kol_account(company, "133"),
                     "description": f"مالیات پرداختی فاکتور {invoice.number}",
                     "debit": invoice.tax_amount,
                     "credit": 0,
@@ -123,7 +134,7 @@ class PostingEngine:
             # Credit: Supplier Payable (231)
             supplier_tafzili = invoice.supplier.tafzili if invoice.supplier else None
             entries.append({
-                "kol": KolAccount.objects.filter(company=company, code="231").first(),
+                "kol": PostingEngine._get_kol_account(company, "231"),
                 "tafzili": supplier_tafzili,
                 "description": f"بدهی به تأمین‌کننده فاکتور {invoice.number}",
                 "debit": 0,
@@ -206,7 +217,7 @@ class PostingEngine:
         bank_tafzili = receipt.bank_account.tafzili if receipt.bank_account else None
         JournalEntry.objects.create(
             voucher=voucher,
-            kol=KolAccount.objects.filter(company=company, code="102").first(),  # Bank Kol
+            kol=PostingEngine._get_kol_account(company, "102"),  # Bank Kol
             tafzili=bank_tafzili,
             description=f"واریز به حساب بانکی - رسید {receipt.number}",
             debit=receipt.amount,
@@ -216,7 +227,7 @@ class PostingEngine:
         customer_tafzili = receipt.customer.tafzili if receipt.customer else None
         JournalEntry.objects.create(
             voucher=voucher,
-            kol=KolAccount.objects.filter(company=company, code="131").first(),  # Customer Receivable Kol
+            kol=PostingEngine._get_kol_account(company, "131"),  # Customer Receivable Kol
             tafzili=customer_tafzili,
             description=f"دریافت از مشتری - رسید {receipt.number}",
             debit=0,
@@ -267,7 +278,7 @@ class PostingEngine:
         supplier_tafzili = payment.supplier.tafzili if payment.supplier else None
         JournalEntry.objects.create(
             voucher=voucher,
-            kol=KolAccount.objects.filter(company=company, code="231").first(),  # Supplier Payable Kol
+            kol=PostingEngine._get_kol_account(company, "231"),  # Supplier Payable Kol
             tafzili=supplier_tafzili,
             description=f"پرداخت به تأمین‌کننده - پرداختی {payment.number}",
             debit=payment.amount,
@@ -277,7 +288,7 @@ class PostingEngine:
         bank_tafzili = payment.bank_account.tafzili if payment.bank_account else None
         JournalEntry.objects.create(
             voucher=voucher,
-            kol=KolAccount.objects.filter(company=company, code="102").first(),  # Bank Kol
+            kol=PostingEngine._get_kol_account(company, "102"),  # Bank Kol
             tafzili=bank_tafzili,
             description=f"برداشت از حساب بانکی - پرداختی {payment.number}",
             debit=0,
