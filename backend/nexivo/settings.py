@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "apps.db_manager.apps.DbManagerConfig",
     "apps.finance.apps.FinanceConfig",
     "apps.llm.apps.LlmConfig",
+    "apps.manufacturing.apps.ManufacturingConfig",
 ]
 
 MIDDLEWARE = [

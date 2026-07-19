@@ -14,6 +14,7 @@ MODULE_CHOICES = [
     ("datasets",      "Data Upload"),
     ("llm",           "LLM Gateway"),
     ("settings",      "Settings"),
+    ("manufacturing",  "Manufacturing"),
 ]
 
 ALL_MODULE_IDS = [m[0] for m in MODULE_CHOICES]
