@@ -156,6 +156,32 @@ class TaxEngineTests(TestCase):
             )
         self.assertIn("fiscal year", str(ctx.exception).lower())
 
+    def test_calculate_vat_auto_lookup_fiscal_year(self):
+        """When fiscal_year=None and an open FY exists, auto-lookup succeeds."""
+        result = TaxEngine.calculate_vat(
+            company=self.company, base_amount=1_000_000,
+            document_type="sales_invoice", user=self.user,
+            source_id=42,
+            # fiscal_year intentionally omitted (None)
+        )
+        self.assertEqual(result["tax_amount"], 100_000)
+        self.assertIsNotNone(result["transaction_id"])
+        tx = TaxTransaction.objects.get(id=result["transaction_id"])
+        self.assertEqual(tx.fiscal_year, self.fy)
+        self.assertEqual(tx.source_id, 42)
+        self.assertEqual(tx.vat_type, "output")
+
+    def test_withholding_tax_auto_lookup_fiscal_year(self):
+        """When fiscal_year=None and an open FY exists, withholding auto-lookup succeeds."""
+        result = TaxEngine.calculate_withholding_tax(
+            company=self.company, base_amount=2_000_000,
+            service_type="consulting", user=self.user,
+            # fiscal_year intentionally omitted (None)
+        )
+        self.assertEqual(result["tax_amount"], 100_000)
+        tx = TaxTransaction.objects.get(id=result["transaction_id"])
+        self.assertEqual(tx.fiscal_year, self.fy)
+
     def test_calculate_vat_idempotency(self):
         """Multiple VAT calculations create separate transactions."""
         for i in range(3):

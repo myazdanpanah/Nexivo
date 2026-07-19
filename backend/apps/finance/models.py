@@ -11,6 +11,7 @@ Key conventions:
 - Automatic journal entry generation from invoices/receipts/payments
 """
 
+from decimal import Decimal
 from django.db import models
 from django.conf import settings
 
@@ -504,7 +505,108 @@ class Cheque(models.Model):
         return f"چک {type_label} شماره {self.number} - {self.bank_name}"
 
 
-# ─── Tax Models (imported from tax.py for Django discovery) ───────
-# These are defined in tax.py but imported here so Django's
-# migration framework discovers them automatically.
-from .tax import TaxCategory, TaxCode, TaxRule, TaxTransaction  # noqa: F401
+# ─── Tax Models ────────────────────────────────────────────────
+# Moved here from tax.py to eliminate circular import.
+# Per TAX_AND_LEGAL_RULES_IRAN.md §4: Tax Master Data.
+
+
+class TaxCategory(models.Model):
+    """
+    Defines tax behavior for items/services.
+    Per TAX_AND_LEGAL_RULES_IRAN.md §4.1.
+    """
+    company = models.ForeignKey("accounts.Company", on_delete=models.CASCADE, related_name="tax_categories")
+    code = models.CharField(max_length=20, help_text="e.g. TAXABLE, EXEMPT")
+    name = models.CharField(max_length=100, help_text="e.g. مشمول مالیات")
+    description = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("company", "code")]
+        ordering = ["code"]
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+
+class TaxCode(models.Model):
+    """
+    Defines applicable tax and its rate.
+    Per TAX_AND_LEGAL_RULES_IRAN.md §4.2.
+    """
+    company = models.ForeignKey("accounts.Company", on_delete=models.CASCADE, related_name="tax_codes")
+    category = models.ForeignKey(TaxCategory, on_delete=models.PROTECT, related_name="tax_codes")
+    code = models.CharField(max_length=30, help_text="e.g. VAT_NORMAL, VAT_EXEMPT")
+    name = models.CharField(max_length=100, help_text="e.g. مالیات بر ارزش افزوده عادی")
+    rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("10.00"), help_text="Tax rate percentage")
+    effective_date = models.DateField(help_text="Date from which this rate applies")
+    expiry_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("company", "code")]
+        ordering = ["code"]
+
+    def __str__(self):
+        return f"{self.code} ({self.rate}%)"
+
+
+class TaxRule(models.Model):
+    """
+    Business logic container for tax application.
+    Per TAX_AND_LEGAL_RULES_IRAN.md §4.3.
+    """
+    company = models.ForeignKey("accounts.Company", on_delete=models.CASCADE, related_name="tax_rules")
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    tax_code = models.ForeignKey(TaxCode, on_delete=models.PROTECT, related_name="rules")
+    conditions = models.JSONField(default=dict, blank=True, help_text="JSON conditions for rule application")
+    priority = models.IntegerField(default=0, help_text="Higher priority rules are evaluated first")
+    version = models.IntegerField(default=1)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-priority", "name"]
+
+    def __str__(self):
+        return self.name
+
+
+class TaxTransaction(models.Model):
+    """
+    Immutable record of every tax calculation.
+    Per TAX_AND_LEGAL_RULES_IRAN.md §8, §18.
+    """
+    company = models.ForeignKey("accounts.Company", on_delete=models.CASCADE, related_name="tax_transactions")
+    fiscal_year = models.ForeignKey(FiscalYear, on_delete=models.PROTECT, related_name="tax_transactions")
+    tax_code = models.ForeignKey(TaxCode, on_delete=models.PROTECT, related_name="transactions")
+    tax_rule = models.ForeignKey(TaxRule, on_delete=models.SET_NULL, null=True, blank=True, related_name="transactions")
+    source_type = models.CharField(max_length=30, help_text="e.g. invoice, receipt")
+    source_id = models.IntegerField(null=True, blank=True, help_text="ID of the source document")
+    base_amount = models.BigIntegerField(help_text="Base amount before tax (Rial)")
+    tax_amount = models.BigIntegerField(help_text="Calculated tax amount (Rial)")
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, help_text="Tax rate applied (%)")
+    vat_type = models.CharField(max_length=20, choices=[
+        ("output", "Output VAT (Sales)"),
+        ("input", "Input VAT (Purchase)"),
+        ("adjustment", "VAT Adjustment"),
+    ], default="output")
+    status = models.CharField(max_length=20, choices=[
+        ("calculated", "Calculated"),
+        ("posted", "Posted to GL"),
+        ("reversed", "Reversed"),
+    ], default="calculated")
+    journal_voucher = models.ForeignKey(JournalVoucher, on_delete=models.SET_NULL, null=True, blank=True, related_name="tax_transactions")
+    description = models.CharField(max_length=500, blank=True, default="")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="tax_transactions")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Tax {self.vat_type} — {self.tax_amount} Rial ({self.tax_code.code})"
